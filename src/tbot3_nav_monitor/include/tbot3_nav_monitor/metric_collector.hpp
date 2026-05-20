@@ -69,10 +69,34 @@ class MetricCollector : public rclcpp_lifecycle::LifecycleNode
     double battery_level_ = 100.0; 
 
     /// @brief Initial minimum distance from an obstacle
-    double min_distance_obstacle_ = 999.0;
+    double min_distance_obstacle_;
 
     /// @brief Initial recovery behavior (how often robot gets stuck)
     int recovery_count_ = 0;
+
+    /// @brief Initial current x and y robot position
+    double current_;
+    double theta_;
+
+    /// @brief Previus odom x and y position used for checking the recovery robot mode
+    double prev_odom_x_ = 0.0;
+    double prev_odom_y_ = 0.0;
+
+    /// @brief Initial cmd linear and angular velocity
+    std::vector<double> cmd_linear_vel_;
+    std::vector<double> cmd_angular_vel_;
+
+    /// @brief Initial sensor data
+    std::vector<double> sensor_ranges_;
+    double sensor_range_min_;
+    double sensor_range_max_;
+
+    /// @brief booleans parameters
+    goal_rached_ = false;
+    odom_received_ = false;
+    sensor_received_ = false;
+    cmd_vel_received_ = false;
+    odom_position_unchanged_ = false;
 
     /// @brief Callback to updates internal state, save pose, accumulates distance etc
     /// @param msg Message of odom type
@@ -88,6 +112,14 @@ class MetricCollector : public rclcpp_lifecycle::LifecycleNode
 
     /// @brief Callback to publish only if it is active
     void publish_metrics();
+
+    /// @brief Method to normalize the angle received
+    /// @param angle Angle to normalize
+    /// @return Normalized angle [-90, 90] rad (es. 270° -> -90°)
+    static double normalized_angle(double angle);
+
+    /// @brief Obstacle avoidance method
+    bool collision_detection();
 
     /// @brief ROS2 declaration
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
