@@ -17,21 +17,21 @@ namespace tbot3_nav_monitor
     MetricCollector::MetricCollector(const std::string & node_name) :
                                     rclcpp_lifecycle::LifecycleNode(node_name)
     {
-        RCLCPP_INFO(get_logger(), "Node %s  has been created! ", node_name.c_str());
+        RCLCPP_INFO(get_logger(), "Metric Collector node %s  has been created! ", node_name.c_str());
 
         // ── Declare parameters with defaults ─────────────────────────────────────
-        declare_parameter("publish_rate",                 1.0); // Node will publish on the topic 1 time per second
-        declare_parameter("battery_drain_rate",           0.01); // Battery consuption battery_level_ -= battery_drain_rate_ * distance_;
-        declare_parameter("target_x",                     0.85); // Target x turtle position
-        declare_parameter("target_y",                     0.70); // Target y turtle position
-        declare_parameter("target_theta",                 0.75); // Target angle theta
-        declare_parameter("distance_tolerance",           0.05); // Tolerance distance for reaching the target position
-        declare_parameter("obstacle_distance_tolerance",  0.15); // Tolerance distance from an obstacle
-        declare_parameter("angle_tolerance",              0.05); // Same tolerance but for the angle
-        declare_parameter("max_linear_vel",               0.5); // Maximum linear velocity
-        declare_parameter("max_angular_vel",              3.0); // Maximum angular velocity
-        declare_parameter("linear_gain",                  0.5); // Linear gain for KP control loop
-        declare_parameter("angular_gain",                 2.0); // Angular gain for KP control loop
+        declare_parameter("publish_rate",                  1.0); 
+        declare_parameter("battery_drain_rate",           0.01); 
+        declare_parameter("target_x",                     0.85); 
+        declare_parameter("target_y",                     0.70); 
+        declare_parameter("target_theta",                 0.75); 
+        declare_parameter("distance_tolerance",           0.05); 
+        declare_parameter("obstacle_distance_tolerance",  0.15); 
+        declare_parameter("angle_tolerance",              0.05); 
+        declare_parameter("max_linear_vel",                0.5);
+        declare_parameter("max_angular_vel",               3.0); 
+        declare_parameter("linear_gain",                   0.5);
+        declare_parameter("angular_gain",                  2.0); 
     
         // ── Get parameter values ────────────────────────────────────────────────
         publish_rate_                 = get_parameter("publish_rate").as_double();
@@ -47,7 +47,7 @@ namespace tbot3_nav_monitor
         linear_gain_                  = get_parameter("linear_gain").as_double();
         angular_gain_                 = get_parameter("angular_gain").as_double();
 
-        RCLCPP_INFO(this->get_logger(),
+        RCLCPP_INFO(get_logger(),
             "MetricCollector initialized | Target: (%.2f, %.2f, %2.f)", 
             target_.x, target_.y, target_.theta);
     }
@@ -305,6 +305,6 @@ namespace tbot3_nav_monitor
             target_.x,  target_.y,
             distance, angle_difference,
             battery_consumption_, recovery_count_);
-}
+    }
 
 } // namespace tbot3_nav_monitor

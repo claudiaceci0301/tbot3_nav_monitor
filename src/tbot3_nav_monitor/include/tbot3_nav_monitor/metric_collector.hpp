@@ -27,20 +27,21 @@ struct Pose2D
 };
 
 /**
- * @brief LifecycleNode that collects and publishes navigation metrics:
- *        - Distance travelled
- *        - Battery consumption (simulated)
- *        - Minimum obstacle distance
- *        - Recovery behavior count
- *        - Goal reached flag
- *
- * Lifecycle transitions:
- *   unconfigured → configured → active → deactivated → finalized
- */
+    * @brief LifecycleNode that collects and publishes navigation metrics:
+    *        - Distance travelled
+    *        - Battery consumption (simulated)
+    *        - Minimum obstacle distance
+    *        - Recovery behavior count
+    *        - Goal reached flag
+    *
+    * Lifecycle transitions:
+    *   unconfigured → configured → active → deactivated → finalized
+*/
+
 class MetricCollector : public rclcpp_lifecycle::LifecycleNode
 {
 public:
-    /// @brief Constructor
+    /// @brief Constructor 
     /// @param node_name Name of the ROS2 node
     explicit MetricCollector(const std::string & node_name);
 
