@@ -81,9 +81,22 @@ namespace tbot3_nav_monitor
 
         // ── Declare parameters with defaults ─────────────────────────────────────
         declare_parameter("recovery_threshold",   3); 
-        declare_parameter("accuracy_threshold",   0.3); 
+        declare_parameter("accuracy_threshold",   0.7); 
         declare_parameter("efficiency_threshold", 0.75);
         declare_parameter("window_size",          10); 
+
+        // Default values from yaml TurtleBot3
+        declare_parameter("normal_max_vel_x",            0.3);
+        declare_parameter("normal_max_vel_theta",        1.0);
+        declare_parameter("normal_xy_goal_tolerance",    0.25);
+        declare_parameter("normal_yaw_goal_tolerance",   0.25);
+
+        // Increased or reduced values due to the adaptive logic (avoid hardcoded values)
+        declare_parameter("reduced_max_vel_x",              0.15);
+        declare_parameter("reduced_max_vel_theta",          0.5);
+        declare_parameter("increaded_xy_goal_tolerance",    0.08);
+        declare_parameter("increased_yaw_goal_tolerance",   0.4);
+        declare_parameter("increased_inflation_radius",     0.4);
         
         // ── Get parameter values ─────────────────────────────────────────────────
         recovery_threshold_   = get_parameter("recovery_threshold").as_int();
@@ -154,10 +167,11 @@ namespace tbot3_nav_monitor
         metrics_sub_.reset();
 
         // Reset state
-        recovery_window_count_  = 0;
+        window_count_           = 0;
         optimal_path_           = 0.0;
         efficiency_             = 0.0;
         mean_accuracy_          = 0.0;
+        sum_accuracy_           = 0.0;
 
         RCLCPP_INFO(get_logger(), "on_cleanup() is called, everything has been resetted the node is UNCONFIGURED");
         return CallbackReturn::SUCCESS;
@@ -167,6 +181,72 @@ namespace tbot3_nav_monitor
     void AdaptiveController::metrics_callback(const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg)
     {
         // LOGIC HERE
+        const auto recovery_count  = msg->recovery_count; // Retrieve the recovery count from the metric collector
+        if(recovery_count > recovery_threshold_)
+        {
+            //Reduce maximum velocity using Nav2 node
+            controller_client_->set_parameters(
+                {rclcpp::Parameter("FollowPath.max_vel_x", 
+                            get_parameter("reduced_max_vel_x").as_double()),     // It was 0.3 before
+                rclcpp::Parameter("FollowPath.max_vel_theta ", 
+                            get_parameter("reduced_max_vel_theta").as_double())} // It was 1.0 before
+            );
+
+            RCLCPP_WARN(get_logger(), "Recovery count high (%d), Reduced max linear and angular velocity!", 
+                        recovery_count);
+        }
+
+        // Restore normal values (from yaml file)
+        if (recovery_count <= recovery_threshold_)
+        {
+            controller_client_->set_parameters({
+            rclcpp::Parameter("FollowPath.max_vel_x",    get_parameter("normal_max_vel_x").as_double()),
+            rclcpp::Parameter("FollowPath.max_vel_theta", get_parameter("normal_max_vel_theta").as_double())
+            });
+        }
+
+        const auto distance_to_goal = msg->distance_to_goal 
+        const auto distance_tol =  msg->distance_tolerance;
+        if(msg->goal_reached == true || distance_to_goal < 1/2 * distance_tol) // Robot reached the goal or is really close to it
+        {
+            // Evaluate the moving average accurancy : 1 - relative error
+            double relattive_err = std::clamp(std::abs((distance_to_goal - distance_tol) / distance_tol), 0.0, 1.0);
+            sum_accuracy_ += 1 - relattive_err;
+            window_count_++;
+        }
+
+        if(window_count_ >= window_size_)
+        {
+            mean_accuracy_ = sum_accuracy_ / static_cast<double>(window_size_);
+        }
+
+        if(mean_accuracy_ < accuracy_threshold_)
+        {
+            // Increase the goal tolerance
+            controller_client_->set_parameters(
+                {rclcpp::Parameter("goal_checker.xy_goal_tolerance", 
+                        get_parameter("increaded_xy_goal_tolerance").as_double()),  // It was 0.25 before
+                rclcpp::Parameter("goal_checker.yaw_goal_tolerance", 
+                        get_parameter("increased_yaw_goal_tolerance").as_double())} // It was 0.25 before
+            );
+
+            RCLCPP_WARN(get_logger(), "Average accurancy is low (%.3f), Increase the goal tolerance!", 
+                        mean_accuracy_);
+        }
+
+        // Restore normal values (from yaml file)
+        if(mean_accuracy_ >= accuracy_threshold_)
+        {
+            controller_client_->set_parameters(
+                {rclcpp::Parameter("goal_checker.xy_goal_tolerance", 
+                        get_parameter("normal_xy_goal_tolerance").as_double()),  
+                rclcpp::Parameter("goal_checker.yaw_goal_tolerance", 
+                        get_parameter("normal_yaw_goal_tolerance").as_double())} 
+            );
+        }
+
+
+
     }
     
 } // namespace tbot3_nav_monitor

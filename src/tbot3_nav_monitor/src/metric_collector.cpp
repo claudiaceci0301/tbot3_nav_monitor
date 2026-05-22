@@ -27,9 +27,9 @@ namespace tbot3_nav_monitor
         declare_parameter("target_theta",                 0.75); 
         declare_parameter("distance_tolerance",           0.05); 
         declare_parameter("obstacle_distance_tolerance",  0.15); 
-        declare_parameter("angle_tolerance",              0.05); 
-        declare_parameter("max_linear_vel",                0.5);
-        declare_parameter("max_angular_vel",               3.0); 
+        declare_parameter("angle_tolerance",              0.25); 
+        declare_parameter("max_linear_vel",                0.3);
+        declare_parameter("max_angular_vel",               1.0); 
         declare_parameter("linear_gain",                   0.5);
         declare_parameter("angular_gain",                  2.0); 
     
@@ -271,12 +271,12 @@ namespace tbot3_nav_monitor
         battery_consumption_  = std::min(battery_consumption_, battery_level_); // Avoid battery consumption > 100%
 
         // ── Goal check ───────────────────────────────────────────────────────────
-        if (distance <= distance_tolerance_)
+        if (distance <= distance_tolerance_ && std::abs(angle_difference) <= angle_tolerance_)
         {
             goal_reached_ = true;
             RCLCPP_INFO(get_logger(),
-                "GOAL REACHED! Final position: (%.3f, %.3f, %.3f)",
-                current_.x, current_.y, current_.theta);
+            "GOAL REACHED! Final position: (%.3f, %.3f, %.3f)",
+            current_.x, current_.y, current_.theta);
         }
 
         // ── Build NavigationMetrics message and publish ──────────────────────────
@@ -291,6 +291,7 @@ namespace tbot3_nav_monitor
         metrics_msg.current_y              = current_.y;
         metrics_msg.current_theta          = current_.theta;
         metrics_msg.distance_to_goal       = distance;
+        metrics_msg.distance_tolerance     = distance_tol;
 
         if (metrics_pub_->is_activated()) // If the node is active publish the custom msg
         {
@@ -300,10 +301,10 @@ namespace tbot3_nav_monitor
         // ── Debug log ────────────────────────────────────────────────────────────
         RCLCPP_DEBUG(get_logger(),
             "Current Position: (%.2f, %.2f, %.2f) | Target: (%.2f, %.2f) | Distance: %.3f "
-            "| AngleDiff: %.3f | Battery consumed: %.2f%% | Recoveries: %d",
+            "|Distance Tollerance: %3.f | AngleDiff: %.3f | Battery consumed: %.2f%% | Recoveries: %d",
             current_.x, current_.y, current_.theta,
             target_.x,  target_.y,
-            distance, angle_difference,
+            distance, distance_tol, angle_difference,
             battery_consumption_, recovery_count_);
     }
 

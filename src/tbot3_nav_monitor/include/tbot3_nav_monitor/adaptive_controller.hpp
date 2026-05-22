@@ -65,17 +65,18 @@ protected:
     on_cleanup(const rclcpp_lifecycle::State & state) override;
 
 private:
-    // ── Private parameters ───────────────────────────
+    // ── Private parameters ───────────────────────────────────────────────────
     int recovery_threshold_;            ///< Es. after 3 recovery →  Reduce maximum velocity
     double accuracy_threshold_;         ///< Es. accurancy low -> Increase goal tolerance
     double efficiency_threshold_;       ///< Switch to more conservative path planning when obstacle avoidance is inefficient
-    int recovery_window_count_  = 0;    ///< Window for a stream of msg
     int window_size_;                   ///< Es. after 10 msgs
-    double optimal_path_ = 0.0;         ///< Euclidean distance start → goal
-    double efficiency_   = 0.0;         ///< Distance_traveled / optimal_path -> [0, 1]
-    double mean_accuracy_       = 0.0;  ///< Everytime there is a msg mean_accuracy_ = (mean_accuracy_ * (window_size_ - 1) + new_accuracy) / window_size_;
+    int window_count_           = 0;    ///< Window for a stream of msg
+    double optimal_path_        = 0.0;  ///< Euclidean distance start → goal
+    double efficiency_          = 0.0;  ///< Distance_traveled / optimal_path -> [0, 1]
+    double mean_accuracy_       = 0.0;  ///< Mean Accurancy (depends on the window size)
+    double sum_accuracy_        = 0.0;  ///< Sum Accurancy
 
-    // ── Subscriber and Clients to Nav2 nodes ────────────────────────────────
+    // ── Subscriber and Clients to Nav2 nodes ─────────────────────────────────
     rclcpp::Subscription<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr metrics_sub_;
     rclcpp::AsyncParametersClient::SharedPtr controller_client_;
     rclcpp::AsyncParametersClient::SharedPtr costmap_client_;
