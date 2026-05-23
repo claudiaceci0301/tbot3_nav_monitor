@@ -138,15 +138,22 @@ namespace tbot3_nav_monitor
         const double new_x = msg->pose.pose.position.x;
         const double new_y = msg->pose.pose.position.y;
 
-        // Accumulate distance + reset flag (only after first message)
-        if (odom_received_)
+        if (!odom_received_) 
+        {
+            // First msg — start and optimal path
+            start_.x = new_x;
+            start_.y = new_y;
+            const double dx = target_.x - start_.x;
+            const double dy = target_.y - start_.y;
+            optimal_path_ = std::sqrt(dx * dx + dy * dy);
+        }
+        else
         {
             const double dx   = new_x - prev_odom_x_;
             const double dy   = new_y - prev_odom_y_;
-            const double step = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));
+            const double step = std::sqrt(dx * dx + dy * dy);
             distance_traveled_ += step;
-
-        // True if the robot is stucked 
+            // If one changed, the robot is in motion otherwhise the position has not changed the robot is stucked
             odom_position_unchanged_ = (new_x == prev_odom_x_ && new_y == prev_odom_y_);
         }
 
@@ -155,20 +162,16 @@ namespace tbot3_nav_monitor
         current_.x   = new_x;
         current_.y   = new_y;
 
-        // Quaternion → yaw
-        tf2::Quaternion q
-        (
+        tf2::Quaternion q(
             msg->pose.pose.orientation.x,
             msg->pose.pose.orientation.y,
             msg->pose.pose.orientation.z,
-            msg->pose.pose.orientation.w
-        );
-
+            msg->pose.pose.orientation.w);
         double roll, pitch, yaw;
         tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
         current_.theta = yaw;
 
-        odom_received_ = true;
+        odom_received_ = true;  
     }
 
     void MetricCollector::scanner_callback(const std::shared_ptr<const sensor_msgs::msg::LaserScan> & msg)
@@ -262,9 +265,9 @@ namespace tbot3_nav_monitor
         // ── Geometry towards goal ────────────────────────────────────────────────
         const double dx               = target_.x - current_.x;
         const double dy               = target_.y - current_.y;
-        const double distance         = std::sqrt(dx * dx + dy * dy);   // FIX: was std::pow with comma inside sqrt
+        const double distance         = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));  // Euclidean distance
         const double angle_to_target  = std::atan2(dy, dx);
-        const double angle_difference = normalize_angle(angle_to_target - current_.theta); // FIX: was normalize_angle(angle_to_target) — missing error term
+        const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
 
         // ── Battery consumption (cumulative) ────────────────────────────────────
         battery_consumption_ += battery_drain_rate_ * distance_traveled_;
@@ -282,16 +285,18 @@ namespace tbot3_nav_monitor
         // ── Build NavigationMetrics message and publish ──────────────────────────
         tbot3_nav_monitor::msg::NavigationMetrics metrics_msg;
 
-        metrics_msg.distance_traveled      = distance_traveled_;
-        metrics_msg.battery_consumption    = battery_consumption_;
-        metrics_msg.min_obstacle_distance  = min_distance_obstacle_;
-        metrics_msg.recovery_count         = recovery_count_;
-        metrics_msg.goal_reached           = goal_reached_;
-        metrics_msg.current_x              = current_.x;
-        metrics_msg.current_y              = current_.y;
-        metrics_msg.current_theta          = current_.theta;
-        metrics_msg.distance_to_goal       = distance;
-        metrics_msg.distance_tolerance     = distance_tol;
+        metrics_msg.distance_traveled           = distance_traveled_;
+        metrics_msg.battery_consumption         = battery_consumption_;
+        metrics_msg.min_obstacle_distance       = min_distance_obstacle_;
+        metrics_msg.recovery_count              = recovery_count_;
+        metrics_msg.goal_reached                = goal_reached_;
+        metrics_msg.current_x                   = current_.x;
+        metrics_msg.current_y                   = current_.y;
+        metrics_msg.current_theta               = current_.theta;
+        metrics_msg.distance_to_goal            = distance;
+        metrics_msg.distance_tolerance          = distance_tol;
+        metrics_msg.obstacle_distance_tolerance = obstacle_distance_tolerance_;
+        metrics_msg.optimal_path                = optimal_path_;
 
         if (metrics_pub_->is_activated()) // If the node is active publish the custom msg
         {
@@ -301,10 +306,10 @@ namespace tbot3_nav_monitor
         // ── Debug log ────────────────────────────────────────────────────────────
         RCLCPP_DEBUG(get_logger(),
             "Current Position: (%.2f, %.2f, %.2f) | Target: (%.2f, %.2f) | Distance: %.3f "
-            "|Distance Tollerance: %3.f | AngleDiff: %.3f | Battery consumed: %.2f%% | Recoveries: %d",
+            "| AngleDiff: %.3f | Battery consumed: %.2f%% | Recoveries: %d",
             current_.x, current_.y, current_.theta,
             target_.x,  target_.y,
-            distance, distance_tol, angle_difference,
+            distance, angle_difference,
             battery_consumption_, recovery_count_);
     }
 

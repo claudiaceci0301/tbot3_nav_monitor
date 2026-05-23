@@ -3,30 +3,28 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
-#include <rclcpp_lifecycle/lifecycle_publisher.hpp>
 
 #include "tbot3_nav_monitor/msg/navigation_metrics.hpp"
 
-#include <vector>
-#include <string>
 #include <memory>
+#include <string>
 
 namespace tbot3_nav_monitor
 {
 
 /**
-    * @brief LifecycleNode that based on collected metrics, implement dynamic parameter adjustments:
-    *   - Reduce maximum velocity when frequent recovery behaviors occur
-    *   - Increase goal tolerance when navigation accuracy is consistently poor
-    *   - Switch to more conservative path planning when obstacle avoidance is inefficient
-    *   - Adjust local costmap parameters based on environment complexity
-    *   -> This node will read the metrics then adjusts them 
-    *   -> And finally, it will send parameter modification commands to the Nav2 nodes
-    *
-    * Lifecycle transitions:
-    *   unconfigured → configured → active → deactivated → finalized
-*/
-
+ * @brief LifecycleNode that based on collected metrics implements dynamic parameter adjustments:
+ *   - Reduce maximum velocity when frequent recovery behaviors occur
+ *   - Increase goal tolerance when navigation accuracy is consistently poor
+ *   - Switch to more conservative path planning when obstacle avoidance is inefficient
+ *   - Adjust local costmap parameters based on environment complexity
+ *
+ *   Flow:
+ *     /navigation_metrics → metrics_callback → AsyncParametersClient → Nav2 nodes
+ *
+ *   Lifecycle transitions:
+ *      unconfigured → configured → active → deactivated → finalized
+ */
 class AdaptiveController : public rclcpp_lifecycle::LifecycleNode
 {
 public:
@@ -46,46 +44,54 @@ protected:
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
     on_configure(const rclcpp_lifecycle::State & state) override;
 
-    /// @brief configured → active: log info 
+    /// @brief configured → active: log only (no publisher or timer)
     /// @param state Current state of the node
     /// @return SUCCESS or FAILURE
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
     on_activate(const rclcpp_lifecycle::State & state) override;
 
-    /// @brief active → deactivated: log info 
+    /// @brief active → deactivated: log only
     /// @param state Current state of the node
     /// @return SUCCESS or FAILURE
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
     on_deactivate(const rclcpp_lifecycle::State & state) override;
 
-    /// @brief any → unconfigured: release all resources
+    /// @brief any → unconfigured: release all resources and reset state
     /// @param state Current state of the node
     /// @return SUCCESS or FAILURE
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
     on_cleanup(const rclcpp_lifecycle::State & state) override;
 
 private:
-    // ── Private parameters ───────────────────────────────────────────────────
-    int recovery_threshold_;            ///< Es. after 3 recovery →  Reduce maximum velocity
-    double accuracy_threshold_;         ///< Es. accurancy low -> Increase goal tolerance
-    double efficiency_threshold_;       ///< Switch to more conservative path planning when obstacle avoidance is inefficient
-    int window_size_;                   ///< Es. after 10 msgs
-    int window_count_           = 0;    ///< Window for a stream of msg
-    double optimal_path_        = 0.0;  ///< Euclidean distance start → goal
-    double efficiency_          = 0.0;  ///< Distance_traveled / optimal_path -> [0, 1]
-    double mean_accuracy_       = 0.0;  ///< Mean Accurancy (depends on the window size)
-    double sum_accuracy_        = 0.0;  ///< Sum Accurancy
+    // ── Thresholds ───────────────────────────────────────────────────────────
+    int    recovery_threshold_;     ///< Max recovery count before reducing velocity
+    double accuracy_threshold_;     ///< Min mean accuracy before relaxing goal tolerance
+    double efficiency_threshold_;   ///< Min efficiency [0,1] before switching to conservative plan
+    double obstacle_threshold_;     ///< Min mean obstacle proximity before adjusting costmap
+    int    window_size_;            ///< Number of messages per evaluation window
 
-    // ── Subscriber and Clients to Nav2 nodes ─────────────────────────────────
+    // ── Window state ─────────────────────────────────────────────────────────
+    int    window_count_             = 0;   ///< Messages accumulated in current window
+    double sum_accuracy_             = 0.0; ///< Accuracy accumulator for current window
+    double sum_obstacle_proximity_   = 0.0; ///< Obstacle proximity accumulator for current window
+    double mean_accuracy_            = 0.0; ///< Mean accuracy over last window
+    double mean_obstacle_proximity_  = 0.0; ///< Mean obstacle proximity over last window
+
+    // ── Efficiency ───────────────────────────────────────────────────────────
+    double efficiency_               = 0.0; ///< optimal_path / distance_traveled → [0, 1]
+
+    // ── Subscriber and Nav2 parameter clients ────────────────────────────────
     rclcpp::Subscription<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr metrics_sub_;
     rclcpp::AsyncParametersClient::SharedPtr controller_client_;
     rclcpp::AsyncParametersClient::SharedPtr costmap_client_;
     rclcpp::AsyncParametersClient::SharedPtr planner_client_;
-   
+
     // ── Private methods ──────────────────────────────────────────────────────
-    /// @brief Adaptive controller callback: reads metric parameters
-    /// @param msg NavigationMetrics Message
-    void metrics_callback(const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg);
+
+    /// @brief Reads NavigationMetrics and applies adaptive logic
+    /// @param msg Incoming NavigationMetrics message
+    void metrics_callback(
+        const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg);
 };
 
 }  // namespace tbot3_nav_monitor

@@ -8,3 +8,5 @@ float64 current_y
 float64 current_theta
 float64 distance_to_goal
 float64 distance_tolerance
+float64 obstacle_distance_tolerance
+float64 optimal_path
