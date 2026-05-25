@@ -30,8 +30,9 @@ class AdaptiveController : public rclcpp_lifecycle::LifecycleNode
 public:
     /// @brief Constructor
     /// @param node_name Name of the ROS2 node
-    explicit AdaptiveController(const std::string & node_name);
-
+    /// @param options If I pass an option it will take it, otherwise it will take the default NodeOptions
+    explicit AdaptiveController(const std::string & node_name, const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+    
     /// @brief Destructor
     ~AdaptiveController() = default;
 

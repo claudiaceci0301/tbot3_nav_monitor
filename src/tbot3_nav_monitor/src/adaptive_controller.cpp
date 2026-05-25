@@ -73,8 +73,8 @@ namespace tbot3_nav_monitor
 
 //  ── Constructor ─────────────────────────────────────────────────────────────
 
-AdaptiveController::AdaptiveController(const std::string & node_name)
-: rclcpp_lifecycle::LifecycleNode(node_name)
+AdaptiveController::AdaptiveController(const std::string & node_name, const rclcpp::NodeOptions & options) :
+                                    rclcpp_lifecycle::LifecycleNode(node_name, options)
 {
     // ── Declare thresholds ───────────────────────────────────────────────────
     declare_parameter("recovery_threshold",   3);    // >3 recovery → reduce velocity

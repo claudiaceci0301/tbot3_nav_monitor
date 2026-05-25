@@ -8,8 +8,12 @@ int main(int argc, char * argv[])
 {
     rclcpp::init(argc, argv);
 
-    auto metric_node   = std::make_shared<tbot3_nav_monitor::MetricCollector>("metric_collector_node");
-    auto adaptive_node = std::make_shared<tbot3_nav_monitor::AdaptiveController>("adaptive_controller_node");
+    // Options for the time confgiuration
+    rclcpp::NodeOptions options;
+    options.parameter_overrides({rclcpp::Parameter("use_sim_time", true)});
+
+    auto metric_node   = std::make_shared<tbot3_nav_monitor::MetricCollector>("metric_collector_node", options);
+    auto adaptive_node = std::make_shared<tbot3_nav_monitor::AdaptiveController>("adaptive_controller_node", options);
 
     // Configure MetricCollector 
     metric_node->configure();

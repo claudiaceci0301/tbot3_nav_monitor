@@ -43,7 +43,8 @@ class MetricCollector : public rclcpp_lifecycle::LifecycleNode
 public:
     /// @brief Constructor 
     /// @param node_name Name of the ROS2 node
-    explicit MetricCollector(const std::string & node_name);
+    /// @param options If I pass an option it will take it, otherwise it will take the default NodeOptions
+    explicit MetricCollector(const std::string & node_name, const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
 
     /// @brief Destructor
     ~MetricCollector() = default;
