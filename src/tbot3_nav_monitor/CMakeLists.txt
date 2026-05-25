@@ -15,6 +15,7 @@ find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)                     
 find_package(tf2_ros REQUIRED)                 
+find_package(lifecycle_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED) 
 
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -43,6 +44,7 @@ ament_target_dependencies(metric_collector
   sensor_msgs
   tf2
   tf2_ros
+  lifecycle_msgs
 )
 
 # Custom message

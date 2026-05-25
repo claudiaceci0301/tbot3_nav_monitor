@@ -1,40 +1,41 @@
 #include "tbot3_nav_monitor/metric_collector.hpp"
 #include "tbot3_nav_monitor/adaptive_controller.hpp"
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp/executors/multi_threaded_executor.hpp>  
-
+#include <rclcpp/executors/multi_threaded_executor.hpp>
+#include <lifecycle_msgs/msg/state.hpp>
 
 int main(int argc, char * argv[])
 {
-    rclcpp::init(argc, argv); // Start ROS2
+    rclcpp::init(argc, argv);
 
-    auto metric_node = std::make_shared<tbot3_nav_monitor::MetricCollector>("metric_collector_node");
+    auto metric_node   = std::make_shared<tbot3_nav_monitor::MetricCollector>("metric_collector_node");
     auto adaptive_node = std::make_shared<tbot3_nav_monitor::AdaptiveController>("adaptive_controller_node");
 
-    // Configure and activate the lifecycle node
+    // Configure MetricCollector 
     metric_node->configure();
     metric_node->activate();
-    // Check for service
+
+    // Configure AdaptiveController — check because it has Nav2 client dependencies
     if (adaptive_node->configure().id() != lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE)
     {
         RCLCPP_ERROR(rclcpp::get_logger("main"), "AdaptiveController on_configure failed!");
         rclcpp::shutdown();
         return 1;
     }
-
     adaptive_node->activate();
 
-    // Multithread spin more node together
+    // Spin both nodes together
     rclcpp::executors::MultiThreadedExecutor executor;
-    executor.add_node(metric_node->get_node_base_interface()); // Spin ROS2 lifecycle node
+    executor.add_node(metric_node->get_node_base_interface());
     executor.add_node(adaptive_node->get_node_base_interface());
     executor.spin();
 
+    // Clean shutdown
     metric_node->deactivate();
     metric_node->cleanup();
     adaptive_node->deactivate();
     adaptive_node->cleanup();
 
-    rclcpp::shutdown(); // ROS2 shutdown
+    rclcpp::shutdown();
     return 0;
 }

@@ -294,7 +294,7 @@ namespace tbot3_nav_monitor
         metrics_msg.current_y                   = current_.y;
         metrics_msg.current_theta               = current_.theta;
         metrics_msg.distance_to_goal            = distance;
-        metrics_msg.distance_tolerance          = distance_tol;
+        metrics_msg.distance_tolerance          = distance_tolerance_;
         metrics_msg.obstacle_distance_tolerance = obstacle_distance_tolerance_;
         metrics_msg.optimal_path                = optimal_path_;
 
