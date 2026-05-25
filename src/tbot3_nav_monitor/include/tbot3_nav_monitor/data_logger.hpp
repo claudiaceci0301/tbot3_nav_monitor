@@ -2,18 +2,14 @@
 #define DATA_LOGGER_HPP
 
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
-#include <rclcpp_lifecycle/lifecycle_publisher.hpp>
 
-#include <geometry_msgs/msg/twist.hpp>
-#include <nav_msgs/msg/odometry.hpp>
-#include <sensor_msgs/msg/laser_scan.hpp>
 
 #include "tbot3_nav_monitor/msg/navigation_metrics.hpp"
 
 #include <vector>
 #include <string>
-#include <memory>
+#include <fstream>
+#include <sstream>
 
 namespace tbot3_nav_monitor
 {
@@ -40,29 +36,21 @@ public:
     ~DataLogger() = default;
 
 private:
-    // ── Runtime parameters (loaded in constructor) ───────────────────────────
 
- 
+    // ── Private parameters  ──────────────────────────────────────────────────
+    std::string log_directory_;                ///< where to save the csv files
+    std::string log_filename_;                 ///< Name file prefix
+    bool enable_csv_;                          ///< To disable/enable file logging
+    std::vector<double> alert_thresholds_;     ///< Threshold for the alert
 
-    // ── Sensor / command cache ───────────────────────────────────────────────
-
-
-
-    // ── Status flags ────────────────────────────────────────────────────────
-
-
-
-    // ── Subscriber / publisher / timer ──────────────────────────────────────
-
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr    odom_sub_;
-    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
-    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr  cmd_vel_sub_;
-
-    std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<tbot3_nav_monitor::msg::NavigationMetrics>> metrics_pub_;
-
-    rclcpp::TimerBase::SharedPtr timer_;
+    // ── Subscriber / files  ──────────────────────────────────────────────────
+    rclcpp::Subscription<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr  csv_sub_;
+    std::ofstream metric_collector_csv_file;
 
     // ── Private methods ──────────────────────────────────────────────────────
+    /// @brief CSV callback: received data and save them with timestamp
+    /// @param msg NavigationMetrics Message
+    void csv_callback(const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg);
 
 
 };

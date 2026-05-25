@@ -1,5 +1,7 @@
 #include "tbot3_nav_monitor/metric_collector.hpp"
 #include "tbot3_nav_monitor/adaptive_controller.hpp"
+#include "tbot3_nav_monitor/data_logger.hpp"
+
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/multi_threaded_executor.hpp>
 #include <lifecycle_msgs/msg/state.hpp>
@@ -12,8 +14,10 @@ int main(int argc, char * argv[])
     rclcpp::NodeOptions options;
     options.parameter_overrides({rclcpp::Parameter("use_sim_time", true)});
 
-    auto metric_node   = std::make_shared<tbot3_nav_monitor::MetricCollector>("metric_collector_node", options);
-    auto adaptive_node = std::make_shared<tbot3_nav_monitor::AdaptiveController>("adaptive_controller_node", options);
+    // Nodes
+    auto metric_node      = std::make_shared<tbot3_nav_monitor::MetricCollector>("metric_collector_node", options);
+    auto adaptive_node    = std::make_shared<tbot3_nav_monitor::AdaptiveController>("adaptive_controller_node", options);
+    auto data_logger_node = std::make_shared<tbot3_nav_monitor::DataLogger>("data_logger_node", options);
 
     // Configure MetricCollector 
     metric_node->configure();
@@ -28,10 +32,11 @@ int main(int argc, char * argv[])
     }
     adaptive_node->activate();
 
-    // Spin both nodes together
+    // Spin the nodes together
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(metric_node->get_node_base_interface());
     executor.add_node(adaptive_node->get_node_base_interface());
+    executor.add_node(data_logger_node->get_node_base_interface());
     executor.spin();
 
     // Clean shutdown

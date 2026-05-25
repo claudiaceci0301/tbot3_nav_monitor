@@ -27,6 +27,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 add_executable(metric_collector
   src/metric_collector.cpp
   src/adaptive_controller.cpp
+  src/data_logger.cpp
   src/main.cpp 
   
 )
