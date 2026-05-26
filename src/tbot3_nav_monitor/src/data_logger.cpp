@@ -1,4 +1,4 @@
-#include "tbot3_nav_monitor/data_collector.hpp"
+#include "tbot3_nav_monitor/data_logger.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 #include <chrono>
@@ -22,10 +22,10 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
     enable_csv_ =                      get_parameter("enable_csv").as_bool();
     log_directory_ =                   get_parameter("log_directory").as_string();
     log_filename_ =                    get_parameter("log_filename").as_string();
-    battery_alert_thresholds_ =        get_parameter("battery_alert_thresholds").as_double_vector();
+    battery_alert_thresholds_ =        get_parameter("battery_alert_thresholds").as_double_array();
     stagnant_count_alert_thresholds_ = get_parameter("stagnant_count_alert_thresholds").as_int();
-    odom_rate_alert_threshold_ =       get_parameter("odom_rate_alert_threshold").as_double_vector();
-    latency_ms_alert_threshold_ =      get_parameter("latency_ms_alert_threshold").as_double_vector();
+    odom_rate_alert_threshold_ =       get_parameter("odom_rate_alert_threshold").as_double_array();
+    latency_ms_alert_threshold_ =      get_parameter("latency_ms_alert_threshold").as_double_array();
 
     // ── Timestamp ────────────────────────────────────────────────────────────
     auto now = this->get_clock()->now(); // get_clock() follows ROS2 clock
@@ -50,7 +50,9 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
             RCLCPP_INFO(get_logger(), "CSV logging enabled!");
 
             metric_collector_csv_file
-                << "timestamp_ms,"
+                << "real_time_ms [ms],"        
+                << "sim_time_ms [ms],"    
+                << "timestamp_ms [ms],"
                 << "publish_time [ms],"
                 << "distance_traveled [m],"
                 << "battery_consumption [%],"   
@@ -70,73 +72,97 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
 
 // ── Subscriber callbacks  ──────────────────────────────────────────────
 
-void DataLogger::csv_callback(const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg)
+void DataLogger::csv_callback(
+    const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg)
 {
-    if (!enable_csv_ || !metric_collector_csv_file.is_open()) return;
+    if (!enable_csv_ || !metric_collector_csv_file.is_open())
+        return;
 
-    // Real time
-    auto timestamp_now_ = std::chrono::duration_cast<std::chrono::milliseconds>( 
-                            std::chrono::system_clock::now().time_since_epoch()).count(); //int64 in mms from 1/1/1970
+    // Real Time (system clock - wall time) 
+    auto real_time_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count();
 
+     // Sim Time 
+    auto sim_time_ms = this->get_clock()->now().nanoseconds() / 1000000; // rclcpp::Time
+
+    // Publish time (from message header)
+    auto publish_time_ms = rclcpp::Time(msg->header.stamp).nanoseconds() / 1000000;
+
+    // Latency (ROS receive - publish)
+    const auto received_time = this->get_clock()->now(); // rclcpp::Time
+    const auto publish_time = rclcpp::Time(msg->header.stamp);
+
+    double latency_ms = (received_time - publish_time).seconds() * 1000.0;
+
+    // Write CSV file
     metric_collector_csv_file
-        << timestamp_now_ << ","                               // Real time
-        << rclcpp::Time(msg->header.stamp).seconds()  << ","  // MetricCollector publish time (sim time)
+        << real_time_ms << ","        // wall clock
+        << sim_time_ms << ","         // sim clock
+        << publish_time_ms << ","     // publisher timestamp
+        << latency_ms << ","          // transport delay
         << msg->distance_traveled << ","
         << msg->battery_consumption << ","
         << msg->min_obstacle_distance << ","
         << msg->goal_reached << ","
-        << msg->distance_to_goal << "\n";
+        << msg->distance_to_goal
+        << "\n";
 
-    metric_collector_csv_file.flush(); // It forced the writing of the buffer on the disk immediatly (riduced loose of info)
+    metric_collector_csv_file.flush();
 
     // ── Battery Alert  ─────────────────────────────────────────────────
-    if (msg->battery_consumption > battery_alert_thresholds_.at(2))      // > 95% → ERROR
+
+    if (msg->battery_consumption > battery_alert_thresholds_.at(2))
     {
-        RCLCPP_ERROR(get_logger(), " [ERROR] Battery consumption almost 100%!");
+        RCLCPP_ERROR(get_logger(), "[ERROR] Battery almost empty!");
     }
-    else if (msg->battery_consumption > battery_alert_thresholds_.at(1)) // > 85% → WARN
+    else if (msg->battery_consumption > battery_alert_thresholds_.at(1))
     {
-        RCLCPP_WARN(get_logger(), " [WARN] Battery consumption is now greater than 85%!");
-        if(!msg->goal_reached)
+        RCLCPP_WARN(get_logger(), "[WARN] Battery high consumption");
+
+        if (!msg->goal_reached)
         {
-            RCLCPP_WARN(get_logger(), " [WARN] Battery consumption is greater than 85 and has not reached the goal | The robot is consuming too much battery!");
+            RCLCPP_WARN(get_logger(),
+                "[WARN] High battery usage without reaching goal");
         }
     }
-    else if (msg->battery_consumption > battery_alert_thresholds_.at(0)) // > 50% → INFO
+    else if (msg->battery_consumption > battery_alert_thresholds_.at(0))
     {
-        RCLCPP_INFO(get_logger(), " [INFO] Battery consumption is now greater than 50%!");
+        RCLCPP_INFO(get_logger(), "[INFO] Battery > 50%");
     }
-   
 
     // ── Distance to Goal  ─────────────────────────────────────────────────
+
     if (msg->distance_to_goal >= prev_distance_to_goal_)
     {
         stagnant_count_++;
-        if (stagnant_count_ >= stagnant_count_alert_thresholds_)  // after 5 consecutive ticks
-            RCLCPP_WARN(get_logger(), "Distance from goal not decreasing for %d ticks!", stagnant_count_);
+
+        if (stagnant_count_ >= stagnant_count_alert_thresholds_)
+        {
+            RCLCPP_WARN(get_logger(),
+                "Distance not decreasing for %d ticks",
+                stagnant_count_);
+        }
     }
     else
     {
-        stagnant_count_ = 0;  // Reset if it improves
+        stagnant_count_ = 0;
     }
+
     prev_distance_to_goal_ = msg->distance_to_goal;
 
     // ── Latency  ──────────────────────────────────────────────────────────
-    // How much time has passed from when MetricCollector publishes its metrics and DataLogger receives them
-    const auto received_time = this->get_clock()->now(); // rclcpp::Time
-    const auto publish_time = rclcpp::Time(msg->header.stamp);
-    double latency_ms = (received_time - publish_time).seconds() * 1000.0; // ms
 
-    if(latency_ms > latency_ms_alert_threshold_.at(0))
+    if (latency_ms > latency_ms_alert_threshold_.at(0))
     {
-        RCLCPP_WARN(get_logger(), " [WARN] Latency ms is greater than 100ms!")
+        RCLCPP_WARN(get_logger(), "[WARN] Latency > 100ms");
     }
 
-    if(latency_ms > latency_ms_alert_threshold_.at(1))
+    if (latency_ms > latency_ms_alert_threshold_.at(1))
     {
-        RCLCPP_ERROR(get_logger(), " [ERROR] Latency ms is greater than 500ms!")
+        RCLCPP_ERROR(get_logger(), "[ERROR] Latency > 500ms");
     }
-
 }
 
 void DataLogger::odom_rate_callback(const std::shared_ptr<const nav_msgs::msg::Odometry> &)

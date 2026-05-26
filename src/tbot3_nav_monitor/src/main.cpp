@@ -35,9 +35,9 @@ int main(int argc, char * argv[])
 
     // Spin the nodes together
     rclcpp::executors::MultiThreadedExecutor executor;
-    executor.add_node(metric_node->get_node_base_interface()); // rclccpp lifecycle nodes
-    executor.add_node(adaptive_node->get_node_base_interface());
-    executor.add_node(data_logger_node-); //rclcpp node
+    executor.add_node(metric_node->get_node_base_interface());   // rclccpp lifecycle nodes
+    executor.add_node(adaptive_node->get_node_base_interface()); // rclccpp lifecycle nodes
+    executor.add_node(data_logger_node);                        // rclcpp node
     executor.spin();
 
     // Clean shutdown

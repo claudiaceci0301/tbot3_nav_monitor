@@ -1,0 +1,38 @@
+# config/params.yaml
+# overrides the default or use the same default parameters
+
+metric_collector_node:
+  ros__parameters:
+    use_sim_time: true
+    publish_rate: 1.0
+    battery_drain_rate: 0.01
+    target_x: 0.85
+    target_y: 0.70
+    target_theta: 0.75
+    distance_tolerance: 0.05
+    obstacle_distance_tolerance: 0.15
+    angle_tolerance: 0.25
+    max_linear_vel: 0.3
+    max_angular_vel: 1.0
+    linear_gain: 0.5
+    angular_gain: 2.0
+
+adaptive_controller_node:
+  ros__parameters:
+    use_sim_time: true
+    recovery_threshold: 3
+    accuracy_threshold: 0.7
+    efficiency_threshold: 0.75
+    obstacle_threshold: 0.4
+    window_size: 10
+
+data_logger_node:
+  ros__parameters:
+    use_sim_time: true
+    enable_csv: true
+    log_directory: "/root/logs"
+    log_filename: "metric_collector_data"
+    battery_alert_thresholds: [0.5, 0.85, 0.95]
+    stagnant_count_alert_thresholds: 5
+    odom_rate_alert_threshold: [5.0, 10.0]
+    latency_ms_alert_threshold: [100.0, 500.0]
