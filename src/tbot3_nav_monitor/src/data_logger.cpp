@@ -129,7 +129,7 @@ void DataLogger::csv_callback(
     }
     else if (msg->battery_consumption > battery_alert_thresholds_.at(0))
     {
-        RCLCPP_INFO(get_logger(), "[INFO] Battery > 50%");
+        RCLCPP_INFO(get_logger(), "[INFO] Battery > 50");
     }
 
     // ── Distance to Goal  ─────────────────────────────────────────────────
