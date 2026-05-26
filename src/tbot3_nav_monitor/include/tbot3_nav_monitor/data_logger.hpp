@@ -51,7 +51,7 @@ private:
     double odom_rate_             = 0.0;               ///< Odom Rate [s]
     double prev_distance_to_goal_ = 0.0;               ///< Previous Distance to goal [m]
     int stagnant_count_           = 0;                 ///< Initial stagnant count value
-    rclcpp::Time last_odom_time_;
+    last_odom_time_ = this->get_clock()->now();        ///< Last odom time [ms] (coherent time type)
 
     // ── Subscriber / files  ──────────────────────────────────────────────────
     rclcpp::Subscription<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr csv_sub_;

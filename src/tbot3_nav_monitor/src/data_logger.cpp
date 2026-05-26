@@ -87,8 +87,9 @@ void DataLogger::csv_callback(
      // Sim Time 
     auto sim_time_ms = this->get_clock()->now().nanoseconds() / 1000000; // rclcpp::Time
 
-    // Publish time (from message header)
-    auto publish_time_ms = rclcpp::Time(msg->header.stamp).nanoseconds() / 1000000;
+    // Publish time (from message header) →  RCL_ROS_TIME 
+    const auto publish_time = rclcpp::Time(msg->header.stamp, 
+                            this->get_clock()->get_clock_type()).nanoseconds() / 1000000;;
 
     // Latency (ROS receive - publish)
     const auto received_time = this->get_clock()->now(); // rclcpp::Time
