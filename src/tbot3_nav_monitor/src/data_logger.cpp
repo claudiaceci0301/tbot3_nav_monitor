@@ -31,6 +31,8 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
     auto now = this->get_clock()->now(); // get_clock() follows ROS2 clock
     session_timestamp_ = now.nanoseconds() / 1000000; 
 
+    last_odom_time_ = this->get_clock()->now(); 
+
     // ── Subscribers ──────────────────────────────────────────────────────────
     odom_rate_sub_ = create_subscription<nav_msgs::msg::Odometry>("/odom", 10,
         std::bind(&DataLogger::odom_rate_callback, this, std::placeholders::_1));
@@ -87,14 +89,15 @@ void DataLogger::csv_callback(
      // Sim Time 
     auto sim_time_ms = this->get_clock()->now().nanoseconds() / 1000000; // rclcpp::Time
 
-    // Publish time (from message header) →  RCL_ROS_TIME 
-    const auto publish_time = rclcpp::Time(msg->header.stamp, 
-                            this->get_clock()->get_clock_type()).nanoseconds() / 1000000;;
+    // Publish time rclcpp::Time (from message header) -> to force RCL_ROS_TIME 
+    const auto publish_time = rclcpp::Time(msg->header.stamp,
+                            this->get_clock()->get_clock_type());
 
-    // Latency (ROS receive - publish)
+    // int64_t ms -> CSV
+    const auto publish_time_ms = publish_time.nanoseconds() / 1000000;
+
+    // Latency -> btw rclcpp::Time
     const auto received_time = this->get_clock()->now(); // rclcpp::Time
-    const auto publish_time = rclcpp::Time(msg->header.stamp);
-
     double latency_ms = (received_time - publish_time).seconds() * 1000.0;
 
     // Write CSV file
