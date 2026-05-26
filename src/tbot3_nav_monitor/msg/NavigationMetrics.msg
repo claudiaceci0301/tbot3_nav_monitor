@@ -1,3 +1,6 @@
+# NavigationMetrics.msg
+
+std_msgs/Header header
 float64 distance_traveled
 float64 battery_consumption
 float64 min_obstacle_distance

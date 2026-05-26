@@ -297,6 +297,8 @@ void MetricCollector::control_loop()
     metrics_msg.distance_tolerance          = distance_tolerance_;
     metrics_msg.obstacle_distance_tolerance = obstacle_distance_tolerance_;
     metrics_msg.optimal_path                = optimal_path_;
+    metrics_msg.header.stamp                = this->get_clock()->now();
+    metrics_msg.header.frame_id             = "base_link";
 
     if (metrics_pub_->is_activated()) // If the node is active publish the custom msg
     {

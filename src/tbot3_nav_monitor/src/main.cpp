@@ -11,6 +11,7 @@ int main(int argc, char * argv[])
     rclcpp::init(argc, argv);
 
     // Options for the time confgiuration
+    // In Gazebo the time is not real but simulated - use_sim_time allows sincronization of time
     rclcpp::NodeOptions options;
     options.parameter_overrides({rclcpp::Parameter("use_sim_time", true)});
 
