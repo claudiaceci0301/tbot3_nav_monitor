@@ -20,8 +20,7 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/NavigationMetrics.msg"
-  DEPENDENCIES geometry_msgs
-  DEPENDENCIES std_msgs
+  DEPENDENCIES geometry_msgs std_msgs
 )
 
 # Executable definition
@@ -42,6 +41,7 @@ ament_target_dependencies(metric_collector
   rclcpp
   rclcpp_lifecycle
   geometry_msgs
+  std_msgs          
   nav_msgs
   sensor_msgs
   tf2

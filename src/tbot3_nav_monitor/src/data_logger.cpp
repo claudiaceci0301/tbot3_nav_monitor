@@ -28,8 +28,8 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
     latency_ms_alert_threshold_ =      get_parameter("latency_ms_alert_threshold").as_double_vector();
 
     // ── Timestamp ────────────────────────────────────────────────────────────
-    auto now = this->get_clock()->now();              // get_clock() follows ROS2 clock
-    session_timestamp_ = now.nanoseconds() / 1000000; //int64 in mms from 1/1/1970
+    auto now = this->get_clock()->now(); // get_clock() follows ROS2 clock
+    session_timestamp_ = now.nanoseconds() / 1000000; 
 
     // ── Subscribers ──────────────────────────────────────────────────────────
     odom_rate_sub_ = create_subscription<nav_msgs::msg::Odometry>("/odom", 10,
@@ -50,13 +50,13 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
             RCLCPP_INFO(get_logger(), "CSV logging enabled!");
 
             metric_collector_csv_file
+                << "timestamp_ms,"
+                << "publish_time [ms],"
                 << "distance_traveled [m],"
-                << "battery_consumption [%},"
+                << "battery_consumption [%],"   
                 << "min_obstacle_distance [m],"
-                << "goal reached,"
-                << "distance_to_goal [m],"
-                << "session_timestamp [ms],"
-                << "\n";
+                << "goal_reached,"
+                << "distance_to_goal [m]\n";    
         }
     }
 
@@ -74,14 +74,18 @@ void DataLogger::csv_callback(const std::shared_ptr<const tbot3_nav_monitor::msg
 {
     if (!enable_csv_ || !metric_collector_csv_file.is_open()) return;
 
+    // Real time
+    auto timestamp_now_ = std::chrono::duration_cast<std::chrono::milliseconds>( 
+                            std::chrono::system_clock::now().time_since_epoch()).count(); //int64 in mms from 1/1/1970
+
     metric_collector_csv_file
+        << timestamp_now_ << ","                               // Real time
+        << rclcpp::Time(msg->header.stamp).seconds()  << ","  // MetricCollector publish time (sim time)
         << msg->distance_traveled << ","
         << msg->battery_consumption << ","
         << msg->min_obstacle_distance << ","
         << msg->goal_reached << ","
-        << msg->distance_to_goal << ","
-        << session_timestamp_
-        << "\n";
+        << msg->distance_to_goal << "\n";
 
     metric_collector_csv_file.flush(); // It forced the writing of the buffer on the disk immediatly (riduced loose of info)
 
@@ -95,8 +99,7 @@ void DataLogger::csv_callback(const std::shared_ptr<const tbot3_nav_monitor::msg
         RCLCPP_WARN(get_logger(), " [WARN] Battery consumption is now greater than 85%!");
         if(!msg->goal_reached)
         {
-            RCLCPP_WARN(get_logger(), " [WARN] Battery consumption is greater than 85 and has not reached the goal 
-                                        | The robot is consuming too much battery!")
+            RCLCPP_WARN(get_logger(), " [WARN] Battery consumption is greater than 85 and has not reached the goal | The robot is consuming too much battery!");
         }
     }
     else if (msg->battery_consumption > battery_alert_thresholds_.at(0)) // > 50% → INFO

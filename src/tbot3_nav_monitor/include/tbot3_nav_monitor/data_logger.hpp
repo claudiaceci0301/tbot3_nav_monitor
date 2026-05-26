@@ -9,8 +9,7 @@
 
 #include <vector>
 #include <string>
-#include <ofstream>
-#include <cstdint>
+#include <fstream>
 
 namespace tbot3_nav_monitor
 {
