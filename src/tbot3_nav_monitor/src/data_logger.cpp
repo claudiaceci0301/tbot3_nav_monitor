@@ -11,7 +11,7 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
 {
     // ── Declare parameters with defaults ─────────────────────────────────────
     declare_parameter("enable_csv",                      false);
-    declare_parameter("log_directory",                   "/src/tbot3_nav_monitor/logs");
+    declare_parameter("log_directory",                   "/root/tbot3_nav_monitor/logs");
     declare_parameter("log_filename",                    "metric_collector_data");
     declare_parameter("battery_alert_thresholds",        std::vector<double>{0.5, 0.85, 0.95});  
     declare_parameter("stagnant_count_alert_thresholds", 5);
