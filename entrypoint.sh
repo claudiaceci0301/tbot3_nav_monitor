@@ -1,5 +1,3 @@
-#script bash exectued when the container starts
-
 #!/bin/bash
 set -e # stop container if error
 

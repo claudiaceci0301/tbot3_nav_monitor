@@ -1,37 +1,36 @@
-# docker-compose.yaml — is the file that describes how to start one or more container from an existing image
-# The image is the "snapshot" of the system build from the Dockerfile, it is static it does not change
-# It defines ports, variables, dependecies etc
-# It avoids the command "run docker etc" each time, launch everything with docker-compose up
 version: '3.8'
 
 services:
-    ros2_humble:
-        build: 
-            context: .
-            dockerfile: Dockerfile
-            args:
-                WORKSPACE: /tbot3_nav_monitor
-        image: ros2_humble_backup
-        container_name: ros2_humble_new
+  ros2_humble:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        WORKSPACE: /workspace
 
+    image: ros2_humble_dev
+    container_name: ros2_humble_new
 
-        # network host : allows the comunication DDS/ROS2 without bridge
-        network_mode : host # foxglove port - "8765:8765"
+    # Port mapping per Foxglove
+    ports:
+      - "8765:8765"
 
-        environment: # env variable
-            - ROS_DISTRO: humble
-            - ROS_DOMAIN_ID: 0
-            - WORKSPACE: /tbot3_nav_monitor
+    environment:
+      ROS_DISTRO: humble
+      TURTLEBOT3_MODEL: burger
+      ROS_DOMAIN_ID: "0"
+      WORKSPACE: /workspace
 
-        # synchronize host and container (host:container)
-        volumes:
-            - /home/clau0301/projects/tbot3_nav_monitor:/root/tbot3_nav_monitor
-        
-        # Start bridge Foxglove at launch
-        command: >
-            ros2 launch foxglove_bridge foxglove_bridge_launch.xml
-            port:=8765
-            address:=0.0.0.0
-        
-        stdin_open: true
-        tty: true
+    volumes:
+      - .:/workspace
+
+    command:
+      - ros2
+      - launch
+      - foxglove_bridge
+      - foxglove_bridge_launch.xml
+      - port:=8765
+      - address:=0.0.0.0
+
+    stdin_open: true
+    tty: true

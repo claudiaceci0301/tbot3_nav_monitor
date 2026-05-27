@@ -5,10 +5,11 @@
 # Once done it becomes our docker image
 
 # ── My Image from the last commit ────────────────────────────────────────────────
+# base immage (immutable)
 FROM ros2_humble_backup
 
 # ── WS build ─────────────────────────────────────────────────────────────────────
-ARG WORKSPACE=/tbot3_nav_monitor
+ARG WORKSPACE=/workspace
 
 # ── Env variable ─────────────────────────────────────────────────────────────────
 ENV ROS_DISTRO=humble \
@@ -23,8 +24,8 @@ RUN echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc
 RUN echo "if [ -f /root/tbot3_nav_monitor/install/setup.bash ]; then source /root/tbot3_nav_monitor/install/setup.bash; fi" >> ~/.bashrc
 
 # ── Entrypoint for the source file ───────────────────────────────────────────────
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # ── WS ───────────────────────────────────────────────────────────────────────────
 WORKDIR ${WORKSPACE}
@@ -32,6 +33,6 @@ WORKDIR ${WORKSPACE}
 # ── FloxGlove Port ───────────────────────────────────────────────────────────────
 EXPOSE 8765
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 # open shell bash when the container starts 
 CMD ["bash"] 
