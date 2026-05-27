@@ -1,3 +1,30 @@
 # docker-compose.yaml — is the file that describes how to start one or more container from an existing image
-# It defines ports, variables, dependeces etc
+# The image is the "snapshot" of the system build from the Dockerfile, it is static it does not change
+# It defines ports, variables, dependecies etc
 # It avoids the command "run docker etc" each time, launch everything with docker-compose up
+version: 3.8
+services:
+    tbot3_nav_monitor:
+        build: .
+            dockerfile: Dockerfile
+            args:
+                WORKSPACE: /tbot3_nav_monitor
+        image: ros2_humble_backup
+        container_name: ros2_humble
+
+        # network host : allows the comunication DDS/ROS2 without bridge
+        network_mode : host # foxglove port - "8765:8765"
+
+        environment: # env variable
+            - ROS_DISTRO = humble
+            - ROS_DOMAIN_ID = 0
+            - WORKSPACE = /tbot3_nav_monitor
+        
+        # Start bridge Foxglove at launch
+        command: >
+            ros2 launch foxglove_bridge foxglove_bridge_launch.xml
+            port := 8765
+            address := 0.0.0.0
+        
+        stdin_open: true
+        tty: true
