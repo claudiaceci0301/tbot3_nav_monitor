@@ -8,17 +8,23 @@
 FROM ros2_humble_backup
 
 # ── WS build ─────────────────────────────────────────────────────────────────────
-ARG WORKSPACE = /tbot3_nav_monitor
+ARG WORKSPACE=/tbot3_nav_monitor
 
 # ── Env variable ─────────────────────────────────────────────────────────────────
-ENV ROS_DISTRO = humble \
-    WORKSPACE = ${WORKSPACE}     
+ENV ROS_DISTRO=humble \
+    WORKSPACE=${WORKSPACE}     
 
 # ── Automatic Source ─────────────────────────────────────────────────────────────
-RUN echo " source /opt/ros/humble/setup.bash" >> /etc/bash.bashrc && \
-    echo "if [-f &{WORKSPACE}/install/setup.bash ]; then" >> /etc/bash.bashrc && \
-    echo " source &{WORKSPACE}/install/setup.bash" >> /etc/bash/bashrc && \
-    echo "fi" >> /etc/bash.bashrc
+RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+RUN echo "export TURTLEBOT3_MODEL=burger" >> ~/.bashrc
+RUN echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc
+
+# Source WS if built
+RUN echo "if [ -f /root/tbot3_nav_monitor/install/setup.bash ]; then source /root/tbot3_nav_monitor/install/setup.bash; fi" >> ~/.bashrc
+
+# ── Entrypoint for the source file ───────────────────────────────────────────────
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # ── WS ───────────────────────────────────────────────────────────────────────────
 WORKDIR ${WORKSPACE}
@@ -26,4 +32,6 @@ WORKDIR ${WORKSPACE}
 # ── FloxGlove Port ───────────────────────────────────────────────────────────────
 EXPOSE 8765
 
-CMD ["bash"]
+ENTRYPOINT ["/entrypoint.sh"]
+# open shell bash when the container starts 
+CMD ["bash"] 
