@@ -1,0 +1,3 @@
+# docker-compose.yaml — is the file that describes how to start one or more container from an existing image
+# It defines ports, variables, dependeces etc
+# It avoids the command "run docker etc" each time, launch everything with docker-compose up
