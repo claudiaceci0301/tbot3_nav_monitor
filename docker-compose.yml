@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   ros2_humble:
     build:
@@ -26,11 +24,16 @@ services:
 
     command:
       - ros2
-      - launch
+      - run
       - foxglove_bridge
-      - foxglove_bridge_launch.xml
-      - port:=8765
-      - address:=0.0.0.0
+      - foxglove_bridge
+      - --ros-args
+      - -p
+      - "port:=8765"
+      - -p
+      - "address:=0.0.0.0"
+      - --params-file
+      - /workspace/config/foxglove_bridge_params.yaml
 
     stdin_open: true
     tty: true

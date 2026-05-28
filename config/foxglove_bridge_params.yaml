@@ -1,0 +1,7 @@
+foxglove_bridge:
+  ros__parameters:
+    port: 8765
+    address: "0.0.0.0"
+    asset_uri_allowlist:
+      - "package://turtlebot3_description/.*"
+      - "package://turtlebot3_gazebo/.*"
