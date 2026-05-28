@@ -67,7 +67,6 @@ avoidance inefficiente → local_costmap    → aumenta inflation_radius
 */
 
 
-
 namespace tbot3_nav_monitor
 {
 
@@ -83,27 +82,27 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     declare_parameter("obstacle_threshold",   0.4);  // <0.4 mean proximity → complex environment
     declare_parameter("window_size",          10);   // evaluate every 10 messages
 
-    // ── Default values from TurtleBot3 burger.yaml ───────────────────────────
-    declare_parameter("normal_max_vel_x",           0.3);
-    declare_parameter("normal_max_vel_theta",        1.0);
-    declare_parameter("normal_xy_goal_tolerance",    0.25);
-    declare_parameter("normal_yaw_goal_tolerance",   0.25);
-    declare_parameter("normal_inflation_radius",     0.5);
-    declare_parameter("normal_gridbase_tolerance",   0.5);
-    declare_parameter("normal_costmap_resolution",   0.05);
-    declare_parameter("normal_costmap_width",        3);
-    declare_parameter("normal_costmap_height",       3);
+    // ── Default values from params.yaml ─────────────────────────────────────
+    declare_parameter("normal_max_vel_x",             0.3);
+    declare_parameter("normal_max_vel_theta",          1.0);
+    declare_parameter("normal_xy_goal_tolerance",      0.25);
+    declare_parameter("normal_yaw_goal_tolerance",     0.25);
+    declare_parameter("normal_inflation_radius",       0.5);
+    declare_parameter("normal_gridbase_tolerance",     0.5);
+    declare_parameter("normal_costmap_resolution",     0.05);
+    declare_parameter("normal_costmap_width",          3);
+    declare_parameter("normal_costmap_height",         3);
 
     // ── Adaptive values ──────────────────────────────────────────────────────
-    declare_parameter("reduced_max_vel_x",           0.15);
-    declare_parameter("reduced_max_vel_theta",        0.5);
-    declare_parameter("increased_xy_goal_tolerance",  0.35);
-    declare_parameter("increased_yaw_goal_tolerance", 0.35);
-    declare_parameter("increased_inflation_radius",   1.0);
-    declare_parameter("reduced_gridbase_tolerance",   0.25);
-    declare_parameter("increased_costmap_resolution", 0.1);
-    declare_parameter("increased_costmap_width",      4);
-    declare_parameter("increased_costmap_height",     4);
+    declare_parameter("reduced_max_vel_x",             0.15);
+    declare_parameter("reduced_max_vel_theta",          0.5);
+    declare_parameter("increased_xy_goal_tolerance",   0.35);
+    declare_parameter("increased_yaw_goal_tolerance",  0.35);
+    declare_parameter("increased_inflation_radius",    1.0);
+    declare_parameter("reduced_gridbase_tolerance",    0.25);
+    declare_parameter("increased_costmap_resolution",  0.1);
+    declare_parameter("increased_costmap_width",       4);
+    declare_parameter("increased_costmap_height",      4);
 
     // ── Cache threshold values ───────────────────────────────────────────────
     recovery_threshold_   = get_parameter("recovery_threshold").as_int();
@@ -253,25 +252,28 @@ void AdaptiveController::metrics_callback(
                 get_parameter("normal_max_vel_x").as_double()),
             rclcpp::Parameter("FollowPath.max_vel_theta",
                 get_parameter("normal_max_vel_theta").as_double()),
-            rclcpp::Parameter("goal_checker.xy_goal_tolerance",
+            rclcpp::Parameter("general_goal_checker.xy_goal_tolerance",
                 get_parameter("normal_xy_goal_tolerance").as_double()),
-            rclcpp::Parameter("goal_checker.yaw_goal_tolerance",
+            rclcpp::Parameter("general_goal_checker.yaw_goal_tolerance",
                 get_parameter("normal_yaw_goal_tolerance").as_double())
         });
+
         costmap_client_->set_parameters({
             rclcpp::Parameter("inflation_layer.inflation_radius",
                 get_parameter("normal_inflation_radius").as_double()),
-            rclcpp::Parameter("local_costmap.resolution",
+            rclcpp::Parameter("resolution",
                 get_parameter("normal_costmap_resolution").as_double()),
-            rclcpp::Parameter("local_costmap.width",
+            rclcpp::Parameter("width",
                 get_parameter("normal_costmap_width").as_int()),
-            rclcpp::Parameter("local_costmap.height",
+            rclcpp::Parameter("height",
                 get_parameter("normal_costmap_height").as_int())
         });
+
         planner_client_->set_parameters({
             rclcpp::Parameter("GridBased.tolerance",
                 get_parameter("normal_gridbase_tolerance").as_double())
         });
+
         RCLCPP_INFO(get_logger(), "Goal reached — all Nav2 parameters restored to defaults");
         return;
     }
@@ -304,9 +306,9 @@ void AdaptiveController::metrics_callback(
     if (mean_accuracy_ < accuracy_threshold_)
     {
         controller_client_->set_parameters({
-            rclcpp::Parameter("goal_checker.xy_goal_tolerance",
+            rclcpp::Parameter("general_goal_checker.xy_goal_tolerance",
                 get_parameter("increased_xy_goal_tolerance").as_double()),
-            rclcpp::Parameter("goal_checker.yaw_goal_tolerance",
+            rclcpp::Parameter("general_goal_checker.yaw_goal_tolerance",
                 get_parameter("increased_yaw_goal_tolerance").as_double())
         });
         RCLCPP_WARN(get_logger(),
@@ -315,9 +317,9 @@ void AdaptiveController::metrics_callback(
     else
     {
         controller_client_->set_parameters({
-            rclcpp::Parameter("goal_checker.xy_goal_tolerance",
+            rclcpp::Parameter("general_goal_checker.xy_goal_tolerance",
                 get_parameter("normal_xy_goal_tolerance").as_double()),
-            rclcpp::Parameter("goal_checker.yaw_goal_tolerance",
+            rclcpp::Parameter("general_goal_checker.yaw_goal_tolerance",
                 get_parameter("normal_yaw_goal_tolerance").as_double())
         });
     }
@@ -351,11 +353,11 @@ void AdaptiveController::metrics_callback(
     if (mean_obstacle_proximity_ < obstacle_threshold_)
     {
         costmap_client_->set_parameters({
-            rclcpp::Parameter("local_costmap.resolution",
+            rclcpp::Parameter("resolution",
                 get_parameter("increased_costmap_resolution").as_double()),
-            rclcpp::Parameter("local_costmap.width",
+            rclcpp::Parameter("width",
                 get_parameter("increased_costmap_width").as_int()),
-            rclcpp::Parameter("local_costmap.height",
+            rclcpp::Parameter("height",
                 get_parameter("increased_costmap_height").as_int())
         });
         RCLCPP_WARN(get_logger(),
@@ -364,11 +366,11 @@ void AdaptiveController::metrics_callback(
     else
     {
         costmap_client_->set_parameters({
-            rclcpp::Parameter("local_costmap.resolution",
+            rclcpp::Parameter("resolution",
                 get_parameter("normal_costmap_resolution").as_double()),
-            rclcpp::Parameter("local_costmap.width",
+            rclcpp::Parameter("width",
                 get_parameter("normal_costmap_width").as_int()),
-            rclcpp::Parameter("local_costmap.height",
+            rclcpp::Parameter("height",
                 get_parameter("normal_costmap_height").as_int())
         });
     }

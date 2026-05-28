@@ -1,6 +1,106 @@
 # config/params.yaml
 # overrides the default or use the same default parameters
 
+# Global
+amcl:
+  ros__parameters:
+    use_sim_time: true
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: true
+
+controller_server:
+  ros__parameters:
+    use_sim_time: true
+
+    controller_frequency: 20.0
+
+    # Controllers
+    FollowPath:
+      plugin: "dwb_core::DWBLocalPlanner"
+      max_vel_x: 0.3
+      max_vel_theta: 1.0
+      min_vel_x: 0.0
+      acc_lim_x: 2.5
+      acc_lim_theta: 3.2
+
+    controller_plugins: ["FollowPath"]
+
+    # Goal checker plugin
+    goal_checker_plugins: ["general_goal_checker"]
+
+    general_goal_checker:
+      plugin: "nav2_controller::SimpleGoalChecker"
+      stateful: true
+      xy_goal_tolerance: 0.25
+      yaw_goal_tolerance: 0.25
+
+
+planner_server:
+  ros__parameters:
+    use_sim_time: true
+
+    planner_plugins: ["GridBased"]
+
+    GridBased:
+      plugin: "nav2_navfn_planner/NavfnPlanner"
+      tolerance: 0.5
+
+
+behavior_server:
+  ros__parameters:
+    use_sim_time: true
+    behavior_plugins: ["spin", "backup", "wait"]
+    spin:
+      plugin: "nav2_behaviors/Spin"
+    backup:
+      plugin: "nav2_behaviors/BackUp"
+    wait:
+      plugin: "nav2_behaviors/Wait"
+
+
+# costmap
+local_costmap:
+  ros__parameters:
+    use_sim_time: true
+    global_frame: odom
+    robot_base_frame: base_link
+    rolling_window: true
+    width: 3
+    height: 3
+    resolution: 0.05
+
+    plugins: ["obstacle_layer", "inflation_layer"]
+
+    obstacle_layer:
+      plugin: "nav2_costmap_2d::ObstacleLayer"
+
+    inflation_layer:
+      plugin: "nav2_costmap_2d::InflationLayer"
+      inflation_radius: 0.5
+
+
+global_costmap:
+  ros__parameters:
+    use_sim_time: true
+    global_frame: map
+    robot_base_frame: base_link
+    resolution: 0.05
+
+    plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+
+    static_layer:
+      plugin: "nav2_costmap_2d::StaticLayer"
+
+    obstacle_layer:
+      plugin: "nav2_costmap_2d::ObstacleLayer"
+
+    inflation_layer:
+      plugin: "nav2_costmap_2d::InflationLayer"
+      inflation_radius: 0.5
+
+
 metric_collector_node:
   ros__parameters:
     use_sim_time: true
@@ -17,26 +117,40 @@ metric_collector_node:
     linear_gain: 0.5
     angular_gain: 2.0
 
+
 adaptive_controller_node:
   ros__parameters:
     use_sim_time: true
+
+    # Thresholds
     recovery_threshold: 3
     accuracy_threshold: 0.7
     efficiency_threshold: 0.75
     obstacle_threshold: 0.4
     window_size: 10
+
+    # Normal (default) Nav2 values
     normal_max_vel_x: 0.3
     normal_max_vel_theta: 1.0
-    reduced_max_vel_x: 0.15
-    reduced_max_vel_theta: 0.5
     normal_xy_goal_tolerance: 0.25
     normal_yaw_goal_tolerance: 0.25
+    normal_inflation_radius: 0.5
+    normal_gridbase_tolerance: 0.5
+    normal_costmap_resolution: 0.05
+    normal_costmap_width: 3
+    normal_costmap_height: 3
+
+    # Adaptive values
+    reduced_max_vel_x: 0.15
+    reduced_max_vel_theta: 0.5
     increased_xy_goal_tolerance: 0.35
     increased_yaw_goal_tolerance: 0.35
-    normal_inflation_radius: 0.5
     increased_inflation_radius: 1.0
-    normal_gridbase_tolerance: 0.5
     reduced_gridbase_tolerance: 0.25
+    increased_costmap_resolution: 0.1
+    increased_costmap_width: 4
+    increased_costmap_height: 4
+
 
 data_logger_node:
   ros__parameters:

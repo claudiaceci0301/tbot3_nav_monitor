@@ -2,6 +2,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <chrono>
+#include <filesystem>
 
 namespace tbot3_nav_monitor
 {
@@ -39,6 +40,8 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
 
     if (enable_csv_) 
     {
+        std::filesystem::create_directories(log_directory_);
+
         std::string full_path = log_directory_ + "/" + log_filename_ + "_" + std::to_string(now.nanoseconds()) + ".csv";
 
         metric_collector_csv_file.open(full_path); //ofstream - write only
