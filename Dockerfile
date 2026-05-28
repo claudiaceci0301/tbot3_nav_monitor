@@ -19,6 +19,10 @@ ENV ROS_DISTRO=humble \
 RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 RUN echo "export TURTLEBOT3_MODEL=burger" >> ~/.bashrc
 RUN echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc
+# Foxglove + ROS2: Foxglove Bridge connects to the ROS2 topics and ROS2 uses DDS to publish them 
+# so they must have the same domain of DDS 
+
+👉 se Foxglove è in un domain diverso → NON vede nulla
 
 # Source WS if built
 RUN echo "if [ -f /root/tbot3_nav_monitor/install/setup.bash ]; then source /root/tbot3_nav_monitor/install/setup.bash; fi" >> ~/.bashrc
