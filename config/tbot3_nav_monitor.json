@@ -1,0 +1,234 @@
+{
+  "configById": {
+    "3D!19ayi8t": {
+      "topics": {},
+      "layers": {
+        "2af18988-063b-43a2-b44a-5bc9ec99ec52": {
+          "layerId": "foxglove.Grid",
+          "instanceId": "2af18988-063b-43a2-b44a-5bc9ec99ec52"
+        }
+      },
+      "cameraState": {
+        "perspective": true,
+        "distance": 18.04999999999907,
+        "phi": 60.00000000000126,
+        "thetaOffset": 60.00000000000234,
+        "targetOffset": [
+          1.2502048808359214,
+          0.012529626666215788,
+          2.5777553460999835e-16
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "scene": {},
+      "transforms": {},
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      },
+      "synchronize": false,
+      "imageMode": {}
+    },
+    "RawMessages!364gf8o": {
+      "topicPath": "/foxglove_bridge/sysinfo",
+      "defaultExpanded": false
+    },
+    "RawMessages!3f92x2i": {
+      "defaultExpanded": false,
+      "topicPath": "/map"
+    },
+    "3D!2c7xtrh": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 17.14749999999657,
+        "phi": 51.03244869746371,
+        "thetaOffset": -23.98148771477119,
+        "targetOffset": [
+          0.2726209457835068,
+          0.9684544693094495,
+          2.673952938813237e-17
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-none",
+      "fixedFrame": "map",
+      "scene": {
+        "transforms": {
+          "visible": false
+        },
+        "meshUpAxis": "z_up",
+        "ignoreColladaUpAxis": true,
+        "enableStats": false
+      },
+      "transforms": {},
+      "topics": {
+        "/scan": {
+          "visible": true,
+          "colorField": "intensity",
+          "colorMode": "colormap",
+          "colorMap": "turbo",
+          "pointShape": "circle"
+        },
+        "/global_costmap/costmap": {
+          "visible": false,
+          "unknownColor": "#7f7f7fff",
+          "invalidColor": "#ff00ffff",
+          "frameLocked": false,
+          "drawBehind": false
+        },
+        "/local_costmap/costmap": {
+          "visible": false
+        },
+        "/goal_pose": {
+          "visible": false
+        },
+        "/local_costmap/voxel_grid": {
+          "visible": false
+        },
+        "/map": {
+          "visible": true,
+          "minColor": "#ffffffff",
+          "maxColor": "#000000ff",
+          "unknownColor": "#7f7f7fff",
+          "frameLocked": false,
+          "drawBehind": false,
+          "colorMode": "custom"
+        },
+        "/move_base_simple/goal": {
+          "visible": false
+        },
+        "/robot_description": {
+          "visible": true,
+          "fallbackColor": "#682da6",
+          "links": {
+            "base_link": {
+              "visible": true
+            }
+          }
+        },
+        "/global_costmap/published_footprint": {
+          "visible": false
+        },
+        "/plan": {
+          "visible": true
+        }
+      },
+      "layers": {
+        "grid": {
+          "visible": true,
+          "drawBehind": false,
+          "instanceId": "5243c33e-5f3e-4426-ad3c-1b24278ba7ab",
+          "layerId": "foxglove.Grid",
+          "size": 10,
+          "divisions": 10,
+          "lineWidth": 1,
+          "color": "#248eff",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ]
+        },
+        "f558df58-f4e7-46c4-9a47-1a62d447e86b": {
+          "controlMode": "transforms",
+          "jointStatesTopic": "",
+          "displayMode": "auto",
+          "fallbackColor": "#ffffff",
+          "showAxis": false,
+          "axisScale": 1,
+          "showOutlines": true,
+          "opacity": 1,
+          "visible": true,
+          "instanceId": "f558df58-f4e7-46c4-9a47-1a62d447e86b",
+          "layerId": "foxglove.Urdf",
+          "label": "URDF",
+          "sourceType": "url",
+          "url": "package://turtlebot3_description/urdf/turtlebot3_burger.urdf",
+          "filePath": "",
+          "parameter": "",
+          "topic": "/robot_description",
+          "framePrefix": "",
+          "order": 1
+        }
+      },
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose",
+        "poseEstimateXDeviation": 0.5,
+        "poseEstimateYDeviation": 0.5,
+        "poseEstimateThetaDeviation": 0.26179939
+      },
+      "synchronize": false,
+      "imageMode": {},
+      "followTf": "base_link"
+    },
+    "Tab!370scfi": {
+      "activeTabIdx": 1,
+      "tabs": [
+        {
+          "title": "Overview",
+          "layout": {
+            "direction": "column",
+            "first": "3D!19ayi8t",
+            "second": "RawMessages!364gf8o",
+            "splitPercentage": 67.1607930186605
+          }
+        },
+        {
+          "title": "",
+          "layout": "RawMessages!3f92x2i"
+        }
+      ]
+    }
+  },
+  "layout": {
+    "direction": "row",
+    "first": "3D!2c7xtrh",
+    "second": "Tab!370scfi",
+    "splitPercentage": 74.17081868129675
+  },
+  "globalVariables": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "userNodes": {}
+}

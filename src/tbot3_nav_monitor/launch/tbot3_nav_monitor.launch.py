@@ -11,6 +11,7 @@ def generate_launch_description():
         'params.yaml'
     )
 
+    # One exectuble for the 3 nodes (multithread execution)
     return LaunchDescription([
         Node(
             package = 'tbot3_nav_monitor',
@@ -18,20 +19,5 @@ def generate_launch_description():
             name = 'metric_collector_node',
             parameters = [config],
             output = 'screen'
-    ),
-    Node(
-        package = 'tbot3_nav_monitor',
-        executable = 'metric_collector',
-        name = 'adaptive_controller_node',
-        parameters = [config],
-        output = 'screen'
-    ),
-    Node(
-        package='tbot3_nav_monitor',
-        executable='metric_collector',
-        name='data_logger_node',
-        parameters=[config],
-        output='screen'
     )
-
 ])
