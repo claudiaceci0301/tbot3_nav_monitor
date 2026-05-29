@@ -70,7 +70,17 @@ MetricCollector::on_configure(const rclcpp_lifecycle::State & state)
                 std::bind(&MetricCollector::scanner_callback, this, std::placeholders::_1));
     cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>("/cmd_vel", 10,
                 std::bind(&MetricCollector::cmdvel_callback, this, std::placeholders::_1));
-        
+    
+    /*
+
+    // Nav2 Client
+    nav2_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(this, "navigate_to_pose");
+    if (!nav2_client_->wait_for_action_server(std::chrono::seconds(5)))
+    {
+        RCLCPP_WARN(get_logger(), "Nav2 action server not available");
+    }
+            */
+
     RCLCPP_INFO(get_logger(), "on_configure() called, Node is still INACTIVE");
     return CallbackReturn::SUCCESS;
 }
@@ -106,7 +116,7 @@ MetricCollector::on_deactivate(const rclcpp_lifecycle::State & state)
     return CallbackReturn::SUCCESS;
 }
 
- rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
 {
     rclcpp_lifecycle::LifecycleNode::on_cleanup(state);
@@ -117,6 +127,7 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     odom_sub_.reset();
     scan_sub_.reset();
     cmd_vel_sub_.reset();
+    //nav2_client_.reset();
 
     // Reset state
     distance_traveled_    = 0.0;
@@ -128,12 +139,41 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     odom_received_        = false;
     sensor_received_      = false;
     cmd_vel_received_     = false;
+    geometry_stable_      = false;
+    //nav2_state_.store(Nav2State::UNKNOWN);
+
 
     RCLCPP_INFO(get_logger(), "on_cleanup() is called, everything has been resetted the node is UNCONFIGURED");
     return CallbackReturn::SUCCESS;
 }
 
 // ── Subscriber callbacks  ──────────────────────────────────────────────
+/*
+void MetricCollector::result_callback(const rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::WrappedResult & result)
+{
+    // std::atomic used - Thread-safe state shared between callbacks and control loop
+    using ResultCode = rclcpp_action::ResultCode;
+
+    switch(result.code)
+    {
+        case ResultCode::SUCCEEDED:
+            nav2_state_.store(Nav2State::SUCCEEDED);
+            RCLCPP_INFO(get_logger(), "Nav2 SUCCEDED - GOAL REACHED!");
+            break;
+        case ResultCode::ABORTED:
+            nav2_state_.store(Nav2State::ABORTED);
+            RCLCPP_INFO(get_logger(), "Nav2 ABORTED!");
+            break;
+        case ResultCode::CANCELED:
+            nav2_state_.store(Nav2State::CANCELED);
+            RCLCPP_INFO(get_logger(), "Nav2 CANCELED!");
+            break;
+        default:
+            RCLCPP_INFO(get_logger(), "Nav2 UNKNOWN!");
+    }
+}
+*/
+
 void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::Odometry> & msg)
 {
     const double new_x = msg->pose.pose.position.x;
@@ -155,8 +195,9 @@ void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::O
         const double step = std::sqrt(dx * dx + dy * dy);
         distance_traveled_ += step;
         last_step_ = step;
+
         // If one changed, the robot is in motion otherwhise the position has not changed the robot is stucked
-        odom_position_unchanged_ = (new_x == prev_odom_x_ && new_y == prev_odom_y_);
+        odom_position_unchanged_.store(new_x == prev_odom_x_ && new_y == prev_odom_y_);
     }
 
     prev_odom_x_ = new_x;
@@ -216,14 +257,14 @@ bool MetricCollector::collision_detection()
 
     for (std::size_t i = 0; i < sensor_ranges_.size() / 4; ++i)
     {
-        if (valid(sensor_ranges_.at(i))) // at() can launch std::out_of_range
-        left_min = std::min(left_min, static_cast<double>(sensor_ranges_.at(i)));
+        if (valid(sensor_ranges_[i])) 
+        left_min = std::min(left_min, static_cast<double>(sensor_ranges_[i]));
     }
 
     for (std::size_t i = (3 * sensor_ranges_.size()) / 4; i < sensor_ranges_.size(); ++i)
     {
-        if (valid(sensor_ranges_.at(i)))
-        right_min = std::min(right_min, static_cast<double>(sensor_ranges_.at(i)));
+        if (valid(sensor_ranges_[i]))
+        right_min = std::min(right_min, static_cast<double>(sensor_ranges_[i]));
     }
         
     // Global minimum distance
@@ -251,38 +292,51 @@ void MetricCollector::control_loop()
     // Stop if goal already reached or battery flat
     if (goal_reached_ || battery_consumption_ >= battery_level_) return;
 
+    // Stop if nav2 state is SUCCEDED and is geometry stable true
+    //if(nav2_state_.load() == Nav2State::SUCCEEDED && geometry_stable_) return;
+
     // ── Collision check ──────────────────────────────────────────────────────
     if (collision_detection())
     {
         // Publish a zero-velocity command to stop the robot
         // Recovery: if cmd_vel was non-zero but robot did not move the robot is stucked
         if ((last_cmd_vel_.linear.x  != 0.0 || last_cmd_vel_.angular.z != 0.0) 
-            && odom_position_unchanged_)
+            && odom_position_unchanged_.load())
         {
             recovery_count_++;
             RCLCPP_WARN(get_logger(), "Recovery event #%d detected, Robot is STUCKED!", recovery_count_);
         }
     }
 
-    // ── Geometry towards goal ────────────────────────────────────────────────
+    // ── Battery consumption (cumulative) ────────────────────────────────────
+    battery_consumption_ += battery_drain_rate_ * last_step_;
+    battery_consumption_  = std::min(battery_consumption_, battery_level_); // Avoid battery consumption > 100%
+
+    // ── Goal check - Geometry check ───────────────────────────────────────────────────────────
     const double dx               = target_.x - current_.x;
     const double dy               = target_.y - current_.y;
     const double distance         = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));  // Euclidean distance
     const double angle_to_target  = std::atan2(dy, dx);
     const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
 
-    // ── Battery consumption (cumulative) ────────────────────────────────────
-    battery_consumption_ += battery_drain_rate_ * last_step_;
-    battery_consumption_  = std::min(battery_consumption_, battery_level_); // Avoid battery consumption > 100%
-
-    // ── Goal check ───────────────────────────────────────────────────────────
+    // Geometry check to avoid possibile false negative (Nav2)
     if (distance <= distance_tolerance_ && std::abs(angle_difference) <= angle_tolerance_)
     {
+        geometry_stable_ = true;
         goal_reached_ = true;
         RCLCPP_INFO(get_logger(),
         "GOAL REACHED! Final position: (%.3f, %.3f, %.3f)",
         current_.x, current_.y, current_.theta);
     }
+    else
+    {
+        geometry_stable_ = false; // Reset the variable to false
+    }
+
+    //if(nav2_state_.load() == Nav2State::SUCCEEDED && geometry_stable_)
+    
+
+    
 
     // ── Build NavigationMetrics message and publish ──────────────────────────
     tbot3_nav_monitor::msg::NavigationMetrics metrics_msg;
@@ -301,7 +355,8 @@ void MetricCollector::control_loop()
     metrics_msg.optimal_path                = optimal_path_;
     metrics_msg.header.stamp                = this->get_clock()->now();
     metrics_msg.header.frame_id             = "base_footprint";
-
+    //metrics_msg.nav2_state                  = static_cast<uint8_t>(nav2_state_.load());
+    
     if (metrics_pub_->is_activated()) // If the node is active publish the custom msg
     {
         metrics_pub_->publish(metrics_msg);

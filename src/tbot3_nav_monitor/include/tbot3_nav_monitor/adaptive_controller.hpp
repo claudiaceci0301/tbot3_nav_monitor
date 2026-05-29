@@ -81,11 +81,16 @@ private:
     // ── Efficiency ───────────────────────────────────────────────────────────
     double efficiency_               = 0.0; ///< optimal_path / distance_traveled → [0, 1]
 
+    // ── Goal Reached booleans ────────────────────────────────────────────────
+    bool prev_goal_reached_          = false;
+
     // ── Subscriber and Nav2 parameter clients ────────────────────────────────
     rclcpp::Subscription<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr metrics_sub_;
     rclcpp::AsyncParametersClient::SharedPtr controller_client_;
     rclcpp::AsyncParametersClient::SharedPtr costmap_client_;
     rclcpp::AsyncParametersClient::SharedPtr planner_client_;
+
+    rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SharedPtr nav2_client_;
 
     // ── Private methods ──────────────────────────────────────────────────────
 
@@ -93,6 +98,14 @@ private:
     /// @param msg Incoming NavigationMetrics message
     void metrics_callback(
         const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg);
+
+    /// @brief Method to send a new Nav2 goal
+    /// @param goal New goal to send
+    void send_nav2_goal(const geometry_msgs::msg::PoseStamped & goal);
+    
+    /// @brief Method to reset goal variables
+    /// @param msg Incoming NavigationMetrics message
+    void reset_goal_variable(const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg);
 };
 
 }  // namespace tbot3_nav_monitor

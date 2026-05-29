@@ -13,3 +13,10 @@ float64 distance_to_goal
 float64 distance_tolerance
 float64 obstacle_distance_tolerance
 float64 optimal_path
+
+uint8 NAV2_UNKNOWN=0
+uint8 NAV2_SUCCEEDED=1
+uint8 NAV2_ABORTED=2
+uint8 NAV2_CANCELED=3
+
+uint8 nav2_state
