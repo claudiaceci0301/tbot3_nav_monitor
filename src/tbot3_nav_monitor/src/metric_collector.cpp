@@ -70,16 +70,6 @@ MetricCollector::on_configure(const rclcpp_lifecycle::State & state)
                 std::bind(&MetricCollector::scanner_callback, this, std::placeholders::_1));
     cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>("/cmd_vel", 10,
                 std::bind(&MetricCollector::cmdvel_callback, this, std::placeholders::_1));
-    
-    /*
-
-    // Nav2 Client
-    nav2_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(this, "navigate_to_pose");
-    if (!nav2_client_->wait_for_action_server(std::chrono::seconds(5)))
-    {
-        RCLCPP_WARN(get_logger(), "Nav2 action server not available");
-    }
-            */
 
     RCLCPP_INFO(get_logger(), "on_configure() called, Node is still INACTIVE");
     return CallbackReturn::SUCCESS;
@@ -127,7 +117,6 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     odom_sub_.reset();
     scan_sub_.reset();
     cmd_vel_sub_.reset();
-    //nav2_client_.reset();
 
     // Reset state
     distance_traveled_    = 0.0;
@@ -139,40 +128,12 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     odom_received_        = false;
     sensor_received_      = false;
     cmd_vel_received_     = false;
-    geometry_stable_      = false;
-    //nav2_state_.store(Nav2State::UNKNOWN);
-
 
     RCLCPP_INFO(get_logger(), "on_cleanup() is called, everything has been resetted the node is UNCONFIGURED");
     return CallbackReturn::SUCCESS;
 }
 
 // ── Subscriber callbacks  ──────────────────────────────────────────────
-/*
-void MetricCollector::result_callback(const rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::WrappedResult & result)
-{
-    // std::atomic used - Thread-safe state shared between callbacks and control loop
-    using ResultCode = rclcpp_action::ResultCode;
-
-    switch(result.code)
-    {
-        case ResultCode::SUCCEEDED:
-            nav2_state_.store(Nav2State::SUCCEEDED);
-            RCLCPP_INFO(get_logger(), "Nav2 SUCCEDED - GOAL REACHED!");
-            break;
-        case ResultCode::ABORTED:
-            nav2_state_.store(Nav2State::ABORTED);
-            RCLCPP_INFO(get_logger(), "Nav2 ABORTED!");
-            break;
-        case ResultCode::CANCELED:
-            nav2_state_.store(Nav2State::CANCELED);
-            RCLCPP_INFO(get_logger(), "Nav2 CANCELED!");
-            break;
-        default:
-            RCLCPP_INFO(get_logger(), "Nav2 UNKNOWN!");
-    }
-}
-*/
 
 void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::Odometry> & msg)
 {
@@ -292,9 +253,6 @@ void MetricCollector::control_loop()
     // Stop if goal already reached or battery flat
     if (goal_reached_ || battery_consumption_ >= battery_level_) return;
 
-    // Stop if nav2 state is SUCCEDED and is geometry stable true
-    //if(nav2_state_.load() == Nav2State::SUCCEEDED && geometry_stable_) return;
-
     // ── Collision check ──────────────────────────────────────────────────────
     if (collision_detection())
     {
@@ -319,18 +277,13 @@ void MetricCollector::control_loop()
     const double angle_to_target  = std::atan2(dy, dx);
     const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
 
-    // Geometry check to avoid possibile false negative (Nav2)
+    // Geometry check 
     if (distance <= distance_tolerance_ && std::abs(angle_difference) <= angle_tolerance_)
     {
-        geometry_stable_ = true;
         goal_reached_ = true;
         RCLCPP_INFO(get_logger(),
         "GOAL REACHED! Final position: (%.3f, %.3f, %.3f)",
         current_.x, current_.y, current_.theta);
-    }
-    else
-    {
-        geometry_stable_ = false; // Reset the variable to false
     }
 
     //if(nav2_state_.load() == Nav2State::SUCCEEDED && geometry_stable_)
@@ -355,7 +308,6 @@ void MetricCollector::control_loop()
     metrics_msg.optimal_path                = optimal_path_;
     metrics_msg.header.stamp                = this->get_clock()->now();
     metrics_msg.header.frame_id             = "base_footprint";
-    //metrics_msg.nav2_state                  = static_cast<uint8_t>(nav2_state_.load());
     
     if (metrics_pub_->is_activated()) // If the node is active publish the custom msg
     {

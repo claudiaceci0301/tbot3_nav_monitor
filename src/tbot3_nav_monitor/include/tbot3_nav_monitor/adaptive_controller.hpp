@@ -5,6 +5,8 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
 #include "tbot3_nav_monitor/msg/navigation_metrics.hpp"
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <nav2_msgs/action/navigate_to_pose.hpp>
 
 #include <memory>
 #include <string>
@@ -84,6 +86,24 @@ private:
     // ── Goal Reached booleans ────────────────────────────────────────────────
     bool prev_goal_reached_          = false;
 
+    // ── Nav2 Params ──────────────────────────────────────────────────────────
+    /**
+        * @brief Nav2 Params - std::atomic 
+            * - std::atomic ensures thread-safe access to the variables (no mutex needed for simple types)
+            * - std::atomic prevents the data race
+            * - .load() to read, .store() to write
+    */
+
+    enum Nav2State : uint8_t
+    {
+        UNKNOWN = 0,
+        SUCCEEDED = 1,
+        ABORTED = 2,
+        CANCELED = 3
+    };
+
+    std::atomic<Nav2State> nav2_state_{Nav2State::UNKNOWN}; // Default value
+
     // ── Subscriber and Nav2 parameter clients ────────────────────────────────
     rclcpp::Subscription<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr metrics_sub_;
     rclcpp::AsyncParametersClient::SharedPtr controller_client_;
@@ -92,12 +112,11 @@ private:
 
     rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SharedPtr nav2_client_;
 
-    // ── Private methods ──────────────────────────────────────────────────────
+    // ── Private methods and Callbacks ────────────────────────────────────────
 
     /// @brief Reads NavigationMetrics and applies adaptive logic
     /// @param msg Incoming NavigationMetrics message
-    void metrics_callback(
-        const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg);
+    void metrics_callback(const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg);
 
     /// @brief Method to send a new Nav2 goal
     /// @param goal New goal to send
@@ -105,7 +124,17 @@ private:
     
     /// @brief Method to reset goal variables
     /// @param msg Incoming NavigationMetrics message
-    void reset_goal_variable(const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg);
+    void reset_goal_state();
+
+    /// @brief Callback for Nav2 goal reached result
+    /// @param result Nav2 State result
+    void result_callback(const rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::WrappedResult & result);
+
+    void goal_response_callback(const rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::SharedPtr goal_received);
+
+    void feedback_callback(rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::SharedPtr,
+        const std::shared_ptr<const nav2_msgs::action::NavigateToPose::Feedback> feedback);
+
 };
 
 }  // namespace tbot3_nav_monitor

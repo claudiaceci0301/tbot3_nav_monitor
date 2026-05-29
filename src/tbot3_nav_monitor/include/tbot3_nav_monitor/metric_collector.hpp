@@ -9,9 +9,6 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <nav2_msgs/action/navigate_to_pose.hpp>
-
 #include "tbot3_nav_monitor/msg/navigation_metrics.hpp"
 
 #include <vector>
@@ -98,7 +95,7 @@ private:
     Pose2D start_;                          ///< Initial robot pose (used to compute optimal_path_)
 
 
-   double distance_traveled_  = 0.0;       ///< Cumulative distance travelled [m]
+    double distance_traveled_  = 0.0;       ///< Cumulative distance travelled [m]
     double last_step_ = 0.0;                ///< Last step of the distance travelled [m]
     double optimal_path_ = 0.0;             ///< Euclidean distance start → goal [m]
     double battery_level_      = 100.0;     ///< Remaining battery [%]
@@ -124,32 +121,8 @@ private:
     bool odom_received_    = false;
     bool sensor_received_  = false;
     bool cmd_vel_received_ = false;
-    bool geometry_stable_  = false;
-
     std::atomic<bool> odom_position_unchanged_{false};
 
-    // ── Nav2 Action Client and State ────────────────────────────────────────
-
-    /*
-    enum Nav2State : uint8_t
-    {
-        UNKNOWN = 0,
-        SUCCEEDED = 1,
-        ABORTED = 2,
-        CANCELED = 3
-    };
-
-    
-    /// @brief LifecycleNode that collects and publishes navigation metrics:
-        * - std::atomic ensures thread-safe access to the variables (no mutex needed for simple types)
-        * - std::atomic prevents the data race
-        * - .load() to read, .store() to write
-    ///
-    std::atomic<Nav2State> nav2_state_{Nav2State::UNKNOWN}; // Default value
-
-    rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SharedPtr nav2_client_;
-    */
-    
     // ── Subscriber / publisher / timer ──────────────────────────────────────
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
@@ -160,6 +133,11 @@ private:
     std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<tbot3_nav_monitor::msg::NavigationMetrics>> metrics_pub_;
 
     // ── Private methods ──────────────────────────────────────────────────────
+
+    /// @brief Normalizes angle to [-pi, pi]
+    /// @param angle Angle to normalize [rad]
+    /// @return Normalized angle [rad]
+    double normalize_angle(double angle);
 
     /// @brief Odometry callback: updates current pose, accumulates distance
     /// @param msg Odometry Message
@@ -179,10 +157,6 @@ private:
     /// @brief Checks for imminent collision using cached laser ranges.
     /// @return true if an obstacle is closer than obstacle_distance_tolerance_ (robot in collision)
     bool collision_detection();
-
-    /// @brief Checks for Nav2 goal reached result
-    /// @param result Nav2 State result
-    void result_callback(const rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::WrappedResult & result);
 };
 
 } // namespace tbot3_nav_monitor

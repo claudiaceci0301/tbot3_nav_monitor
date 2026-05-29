@@ -144,9 +144,6 @@ AdaptiveController::on_configure(const rclcpp_lifecycle::State & state)
     if (!planner_client_->wait_for_service(std::chrono::seconds(5)))
         RCLCPP_WARN(get_logger(), "planner_server not available");
     
-    if (!nav2_client_->wait_for_service(std::chrono::seconds(5)))
-        RCLCPP_WARN(get_logger(), "planner_server not available");
-    
     // ── Create subscriber ────────────────────────────────────────────────────
     metrics_sub_ = create_subscription<tbot3_nav_monitor::msg::NavigationMetrics>(
         "/navigation_metrics", 10,
@@ -193,6 +190,7 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
     mean_obstacle_proximity_ = 0.0;
     efficiency_              = 0.0;
     prev_goal_reached_       = false;
+    nav2_state_.store(Nav2State::UNKNOWN);
 
     RCLCPP_INFO(get_logger(), "on_cleanup() called — node UNCONFIGURED");
     return CallbackReturn::SUCCESS;
@@ -201,6 +199,11 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
 //  ── Private method ─────────────────────
 void AdaptiveController::send_nav2_goal(const geometry_msgs::msg::PoseStamped & goal)
 {
+    if (!nav2_client_->wait_for_service(std::chrono::seconds(5)))
+    {
+        RCLCPP_WARN(get_logger(), "Nav2 Server not available");
+    }
+
     nav2_msgs::action::NavigateToPose::Goal nav2_goal;
     nav2_goal.pose = goal;
 
@@ -212,15 +215,11 @@ void AdaptiveController::send_nav2_goal(const geometry_msgs::msg::PoseStamped & 
         std::bind(&AdaptiveController::feedback_callback, this, std::placeholders::_1),
         std::bind(&AdaptiveController::result_callback, this, std::placeholders::_1)   
     );
-
-    // Once sent the new goal, reset the goal state params
-    reset_goal_variable();
 }
 
-void MetricCollector::reset_goal_variable(const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg)
+void AdaptiveController::reset_goal_state()
 {
-    msg->goal_reached = false;
-    msg->nav2_state.store(Nav2State::UNKNOWN);
+    nav2_state_.store(Nav2State::UNKNOWN);
 }
 
 //  ── Subscriber callback — all adaptive logic lives here ─────────────────────
@@ -245,32 +244,26 @@ void AdaptiveController::feedback_callback(rclcpp_action::ClientGoalHandle<nav2_
 
 void AdaptiveController::result_callback(const rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::WrappedResult & result)
 {
-        using ResultCode = rclcpp_action::ResultCode;
+    // std::atomic used - Thread-safe state shared between callbacks and control loop
+    using ResultCode = rclcpp_action::ResultCode;
 
-    switch (result.code)
+    switch(result.code)
     {
         case ResultCode::SUCCEEDED:
             nav2_state_.store(Nav2State::SUCCEEDED);
-            RCLCPP_INFO(get_logger(), "Goal SUCCEEDED");
+            RCLCPP_INFO(get_logger(), "Nav2 SUCCEDED - GOAL REACHED!");
             break;
-
         case ResultCode::ABORTED:
             nav2_state_.store(Nav2State::ABORTED);
-            RCLCPP_WARN(get_logger(), "Goal ABORTED");
+            RCLCPP_INFO(get_logger(), "Nav2 ABORTED!");
             break;
-
         case ResultCode::CANCELED:
             nav2_state_.store(Nav2State::CANCELED);
-            RCLCPP_WARN(get_logger(), "Goal CANCELED");
+            RCLCPP_INFO(get_logger(), "Nav2 CANCELED!");
             break;
-
         default:
-            nav2_state_.store(Nav2State::UNKNOWN);
-            break;
+            RCLCPP_INFO(get_logger(), "Nav2 UNKNOWN!");
     }
-
-    // RESET LOGICO CORRETTO (qui ha senso farlo)
-    reset_goal_state();
 }
 
 void AdaptiveController::metrics_callback(
@@ -326,9 +319,15 @@ void AdaptiveController::metrics_callback(
     }
 
     //  ── Adaptive logic ──────────────────────────────────────
-    if (msg->goal_reached && !prev_goal_reached_) // if the state has changed restore nav2 params
+    // Goal reached if and only if Nav2 is SUCCEEDED and the geometry check is achieved
+    const bool nav2_succeeded = (nav2_state_.load() == Nav2State::SUCCEEDED);
+    const bool geometry_ok    = msg->goal_reached; // from MetricCollector
+
+    if ((nav2_succeeded || geometry_ok) && !prev_goal_reached_) // If is ok and the state has changed
     {
-        // Goal reached — restore all default Nav2 parameters for next navigation
+        prev_goal_reached_ = true; 
+
+        // Restore all default Nav2 parameters for next navigation
         controller_client_->set_parameters({
             rclcpp::Parameter("FollowPath.max_vel_x",
                 get_parameter("normal_max_vel_x").as_double()),
@@ -357,9 +356,12 @@ void AdaptiveController::metrics_callback(
         });
 
         RCLCPP_INFO(get_logger(), "Goal reached — all Nav2 parameters restored to defaults");
+        
+        // Reset goal state
+        reset_goal_state();
+        
         return;
     }
-    prev_goal_reached_ = msg->goal_reached;
 
     // ── Block 1: Recovery count high ─────────────────────────────────────────
     // Too many recoveries → reduce velocity + increase inflation radius
