@@ -96,6 +96,7 @@ private:
     Pose2D start_;                          ///< Initial robot pose (used to compute optimal_path_)
 
     double distance_traveled_  = 0.0;       ///< Cumulative distance travelled [m]
+    double last_step_ = 0.0;                ///< Last step of the distance travelled [m]
     double optimal_path_ = 0.0;             ///< Euclidean distance start → goal [m]
     double battery_level_      = 100.0;     ///< Remaining battery [%]
     double battery_consumption_ = 0.0;      ///< Consumed battery [%]

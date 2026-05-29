@@ -23,17 +23,16 @@ services:
       - .:/workspace
 
     command:
-      - ros2
-      - run
-      - foxglove_bridge
-      - foxglove_bridge
-      - --ros-args
-      - -p
-      - "port:=8765"
-      - -p
-      - "address:=0.0.0.0"
-      - --params-file
-      - /workspace/config/foxglove_bridge_params.yaml
-
+      - bash
+      - -c
+      - >
+        source /opt/ros/humble/setup.bash &&
+        source /workspace/install/setup.bash &&
+        ros2 run foxglove_bridge foxglove_bridge
+        --ros-args
+        -p port:=8765
+        -p address:=0.0.0.0
+        --params-file /workspace/config/foxglove_bridge_params.yaml
+    
     stdin_open: true
     tty: true

@@ -4,20 +4,16 @@ from ament_index_python.packages import get_package_share_directory
 import os
 
 def generate_launch_description():
-    
     config = os.path.join(
         get_package_share_directory('tbot3_nav_monitor'),
         'config',
         'params.yaml'
     )
-
-    # One exectuble for the 3 nodes (multithread execution)
     return LaunchDescription([
         Node(
-            package = 'tbot3_nav_monitor',
-            executable = 'metric_collector',
-            name = 'metric_collector_node',
-            parameters = [config],
-            output = 'screen'
-    )
-])
+            package='tbot3_nav_monitor',
+            executable='metric_collector',
+            parameters=[config],
+            output='screen'
+        )
+    ])

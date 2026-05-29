@@ -123,6 +123,7 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     battery_consumption_  = 0.0;
     battery_level_        = 100.0;
     recovery_count_       = 0;
+    last_step_            = 0;
     goal_reached_         = false;
     odom_received_        = false;
     sensor_received_      = false;
@@ -153,6 +154,7 @@ void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::O
         const double dy   = new_y - prev_odom_y_;
         const double step = std::sqrt(dx * dx + dy * dy);
         distance_traveled_ += step;
+        last_step_ = step;
         // If one changed, the robot is in motion otherwhise the position has not changed the robot is stucked
         odom_position_unchanged_ = (new_x == prev_odom_x_ && new_y == prev_odom_y_);
     }
@@ -270,7 +272,7 @@ void MetricCollector::control_loop()
     const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
 
     // ── Battery consumption (cumulative) ────────────────────────────────────
-    battery_consumption_ += battery_drain_rate_ * distance_traveled_;
+    battery_consumption_ += battery_drain_rate_ * last_step_;
     battery_consumption_  = std::min(battery_consumption_, battery_level_); // Avoid battery consumption > 100%
 
     // ── Goal check ───────────────────────────────────────────────────────────

@@ -156,7 +156,7 @@ data_logger_node:
   ros__parameters:
     use_sim_time: true
     enable_csv: true
-    log_directory: "/root/logs"
+    log_directory: "/workspace/logs"
     log_filename: "metric_collector_data"
     battery_alert_thresholds: [0.5, 0.85, 0.95]
     stagnant_count_alert_thresholds: 5
