@@ -90,19 +90,19 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     declare_parameter("normal_inflation_radius",       0.5);
     declare_parameter("normal_gridbase_tolerance",     0.5);
     declare_parameter("normal_costmap_resolution",     0.05);
-    declare_parameter("normal_costmap_width",          3);
-    declare_parameter("normal_costmap_height",         3);
+    declare_parameter("normal_costmap_width",          2);
+    declare_parameter("normal_costmap_height",         2);
 
     // ── Adaptive values ──────────────────────────────────────────────────────
     declare_parameter("reduced_max_vel_x",             0.15);
     declare_parameter("reduced_max_vel_theta",          0.5);
     declare_parameter("increased_xy_goal_tolerance",   0.35);
     declare_parameter("increased_yaw_goal_tolerance",  0.35);
-    declare_parameter("increased_inflation_radius",    1.0);
+    declare_parameter("increased_inflation_radius",    0.6);
     declare_parameter("reduced_gridbase_tolerance",    0.25);
     declare_parameter("increased_costmap_resolution",  0.1);
-    declare_parameter("increased_costmap_width",       4);
-    declare_parameter("increased_costmap_height",      4);
+    declare_parameter("increased_costmap_width",       3);
+    declare_parameter("increased_costmap_height",      3);
 
     // ── Cache threshold values ───────────────────────────────────────────────
     recovery_threshold_   = get_parameter("recovery_threshold").as_int();
@@ -219,6 +219,9 @@ void AdaptiveController::send_nav2_goal(const geometry_msgs::msg::PoseStamped & 
     send_options.goal_response_callback = std::bind(&AdaptiveController::goal_response_callback, this, std::placeholders::_1);
     send_options.feedback_callback      = std::bind(&AdaptiveController::feedback_callback, this, std::placeholders::_1, std::placeholders::_2);
     send_options.result_callback        = std::bind(&AdaptiveController::result_callback, this, std::placeholders::_1);
+    
+    // Reset nav2 state before sending the new goal
+    reset_nav2_state();
     
     // Send a new Nav2 goal
     RCLCPP_INFO(get_logger(), "Sending new Nav2 goal to the Service!");
@@ -389,9 +392,6 @@ void AdaptiveController::metrics_callback(
         });
 
         RCLCPP_INFO(get_logger(), "Goal reached — all Nav2 parameters restored to defaults");
-        
-        // Reset nav2 state
-        reset_nav2_state();
         
         return;
     }

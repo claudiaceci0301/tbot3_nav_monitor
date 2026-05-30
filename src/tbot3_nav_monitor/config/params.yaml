@@ -109,7 +109,7 @@ metric_collector_node:
     target_x: 0.85
     target_y: 0.70
     target_theta: 0.75
-    distance_tolerance: 0.05
+    distance_tolerance: 2.3
     obstacle_distance_tolerance: 0.15
     angle_tolerance: 0.25
     max_linear_vel: 0.3
@@ -137,20 +137,19 @@ adaptive_controller_node:
     normal_inflation_radius: 0.5
     normal_gridbase_tolerance: 0.5
     normal_costmap_resolution: 0.05
-    normal_costmap_width: 3
-    normal_costmap_height: 3
+    normal_costmap_width: 2
+    normal_costmap_height: 2
 
     # Adaptive values
     reduced_max_vel_x: 0.15
     reduced_max_vel_theta: 0.5
     increased_xy_goal_tolerance: 0.35
     increased_yaw_goal_tolerance: 0.35
-    increased_inflation_radius: 1.0
+    increased_inflation_radius: 0.6
     reduced_gridbase_tolerance: 0.25
     increased_costmap_resolution: 0.1
-    increased_costmap_width: 4
-    increased_costmap_height: 4
-
+    increased_costmap_width: 3
+    increased_costmap_height: 3
 
 data_logger_node:
   ros__parameters:

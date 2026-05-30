@@ -23,7 +23,7 @@ MetricCollector::MetricCollector(const std::string & node_name, const rclcpp::No
     declare_parameter("target_x",                     0.85); 
     declare_parameter("target_y",                     0.70); 
     declare_parameter("target_theta",                 0.75); 
-    declare_parameter("distance_tolerance",           0.05); 
+    declare_parameter("distance_tolerance",            2.3); 
     declare_parameter("obstacle_distance_tolerance",  0.15); 
     declare_parameter("angle_tolerance",              0.25); 
     declare_parameter("max_linear_vel",                0.3);
@@ -147,6 +147,9 @@ void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::O
     // Thread-Safe
     std::lock_guard<std::mutex> lock(state_mutex_);
 
+    // DEBUG odom frame
+    RCLCPP_DEBUG(get_logger(), "ODOM frame=[%s]", msg->header.frame_id.c_str());
+
     const double new_x = msg->pose.pose.position.x;
     const double new_y = msg->pose.pose.position.y;
 
@@ -207,6 +210,10 @@ void MetricCollector::cmdvel_callback(const std::shared_ptr<const geometry_msgs:
  {
     // Thread-Safe
     std::lock_guard<std::mutex> lock(state_mutex_);
+
+    // DEBUG frame
+    RCLCPP_INFO(get_logger(), "GOAL RECEIVED at frame=[%s] pos=(%.3f, %.3f)",
+    msg->header.frame_id.c_str(), msg->pose.position.x, msg->pose.position.y);
     
     //Update target position with the sent goal
     target_.x = msg->pose.position.x;
@@ -224,14 +231,14 @@ void MetricCollector::cmdvel_callback(const std::shared_ptr<const geometry_msgs:
     target_.theta = yaw;
 
     // Re-calculate optimal path with new target
-        if (odom_received_)
+    if (odom_received_)
     {
         const double dx = target_.x - start_.x;
         const double dy = target_.y - start_.y;
         optimal_path_ = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));
     }
     
-    RCLCPP_INFO(get_logger(), "Target updated: (%.2f, %.2f, %.2f)",
+    RCLCPP_INFO(get_logger(), "Target updated: (%.3f, %.3f, %.3f)",
             target_.x, target_.y, target_.theta);
 }
 
@@ -337,13 +344,29 @@ void MetricCollector::control_loop()
     // ── Battery consumption (cumulative) ────────────────────────────────────
     battery_consumption_ += battery_drain_rate_ * last_step_;
     battery_consumption_  = std::min(battery_consumption_, battery_level_); // Avoid battery consumption > 100%
+    
+    // DEBUG before goal check to see if nav2 and metriccollector sees the same position
+    RCLCPP_INFO(
+    get_logger(),
+    "CURRENT=(%.3f %.3f %.3f) TARGET=(%.3f %.3f %.3f)",
+    current_.x,
+    current_.y,
+    current_.theta,
+    target_.x,
+    target_.y,
+    target_.theta);
 
     // ── Goal check - Geometry check ───────────────────────────────────────────────────────────
     const double dx               = target_.x - current_.x;
     const double dy               = target_.y - current_.y;
     const double distance         = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));  // Euclidean distance
-    const double angle_to_target  = std::atan2(dy, dx);
-    const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
+    //const double angle_to_target  = std::atan2(dy, dx);
+    //const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
+    const double angle_difference = normalize_angle(target_.theta - current_.theta);
+    // Check
+    RCLCPP_INFO(get_logger(),
+    "CHECK: dist=%.3f tol=%.3f angle_diff=%.3f angle_tol=%.3f",
+    distance, distance_tolerance_, angle_difference, angle_tolerance_);
 
     // Geometry check 
     if (distance <= distance_tolerance_ && std::abs(angle_difference) <= angle_tolerance_)
@@ -355,8 +378,6 @@ void MetricCollector::control_loop()
     }
 
     //if(nav2_state_.load() == Nav2State::SUCCEEDED && geometry_stable_)
-    
-
     
 
     // ── Build NavigationMetrics message and publish ──────────────────────────
