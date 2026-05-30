@@ -8,15 +8,17 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)        
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)                     
 find_package(tf2_ros REQUIRED)                 
 find_package(lifecycle_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED) 
+find_package(std_srvs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/NavigationMetrics.msg"
@@ -29,7 +31,6 @@ add_executable(metric_collector
   src/adaptive_controller.cpp
   src/data_logger.cpp
   src/main.cpp 
-  
 )
 
 target_include_directories(metric_collector PUBLIC
@@ -40,13 +41,15 @@ target_include_directories(metric_collector PUBLIC
 ament_target_dependencies(metric_collector
   rclcpp
   rclcpp_lifecycle
+  rclcpp_action
   geometry_msgs
   std_msgs          
-  nav_msgs
+  nav2_msgs
   sensor_msgs
   tf2
   tf2_ros
   lifecycle_msgs
+  std_srvs
 )
 
 # Custom message

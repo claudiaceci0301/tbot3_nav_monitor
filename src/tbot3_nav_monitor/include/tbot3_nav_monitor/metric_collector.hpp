@@ -10,10 +10,12 @@
 #include <sensor_msgs/msg/laser_scan.hpp>
 
 #include "tbot3_nav_monitor/msg/navigation_metrics.hpp"
+#include <std_srvs/srv/trigger.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 
+#include <mutex> // for thread safe (avoid data race)
 #include <vector>
 #include <memory>
-#include <atomic>
 
 namespace tbot3_nav_monitor
 {
@@ -79,7 +81,7 @@ protected:
 
 private:
     // ── Runtime parameters (loaded in constructor) ───────────────────────────
- double publish_rate_;                   ///< Timer frequency [Hz]
+    double publish_rate_;                   ///< Timer frequency [Hz]
     double battery_drain_rate_;             ///< Battery drain per metre travelled
     double distance_tolerance_;             ///< Linear goal tolerance [m]
     double obstacle_distance_tolerance_;    ///< Minimum safe obstacle distance [m]
@@ -117,22 +119,29 @@ private:
 
     // ── Status flags ────────────────────────────────────────────────────────
 
-    bool goal_reached_     = false;
-    bool odom_received_    = false;
-    bool sensor_received_  = false;
-    bool cmd_vel_received_ = false;
-    std::atomic<bool> odom_position_unchanged_{false};
+    bool goal_reached_            = false; ///< Bool to check if goal is achieved 
+    bool odom_received_           = false; ///< Bool to check if the odom data has been received 
+    bool sensor_received_         = false; ///< Bool to check if the sensor data has been received 
+    bool cmd_vel_received_        = false; ///< Bool to check if the cmd_vel data has been received 
+    bool odom_position_unchanged_ = false; ///< Bool to check if the odom position has changed
 
     // ── Subscriber / publisher / timer ──────────────────────────────────────
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
     std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<tbot3_nav_monitor::msg::NavigationMetrics>> metrics_pub_;
 
-    // ── Private methods ──────────────────────────────────────────────────────
+    // ── Service ─────────────────────────────────────────────────────────────
+    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;
+
+    // ── Mutex Thread-Safe ───────────────────────────────────────────────────
+    mutable std::mutex state_mutex_; ///< Thread-Safe access variable
+
+    // ── Private methods ─────────────────────────────────────────────────────
 
     /// @brief Normalizes angle to [-pi, pi]
     /// @param angle Angle to normalize [rad]
@@ -150,7 +159,16 @@ private:
     /// @brief cmd_vel callback: caches the last commanded velocity
     /// @param msg Twist Message
     void cmdvel_callback(const std::shared_ptr<const geometry_msgs::msg::Twist> & msg);
+ 
+    /// @brief Callback for subscribing the sent goal to the goal_pose topic
+    /// @param msg PoseStamped message
+    void goal_send_callback(const std::shared_ptr<const geometry_msgs::msg::PoseStamped> & msg);
 
+    /// @brief Service Callback: reset goal state for next nav2 navigation
+    /// @param response Response for the trigger of the next nav2 navigation
+    void reset_callback(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+    
     /// @brief Timer callback: runs one control iteration and publishes metrics
     void control_loop();
 

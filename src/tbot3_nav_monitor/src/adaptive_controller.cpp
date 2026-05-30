@@ -130,24 +130,31 @@ AdaptiveController::on_configure(const rclcpp_lifecycle::State & state)
     planner_client_ = std::make_shared<rclcpp::AsyncParametersClient>(
         this, "planner_server");
     
-    // Nav2 Client
+    // Srv Client
+    reset_client_ = create_client<std_srvs::srv::Trigger>("/metric_collector/reset");
+    
+    // Nav2 Action Client
     nav2_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(this, "navigate_to_pose");
 
     // Wait for services with timeout
     // (change WARN to FAILURE when Nav2 environment is ready)
     if (!controller_client_->wait_for_service(std::chrono::seconds(5)))
-        RCLCPP_WARN(get_logger(), "controller_server not available");
+        RCLCPP_WARN(get_logger(), "Controller_server not available!");
 
     if (!costmap_client_->wait_for_service(std::chrono::seconds(5)))
-        RCLCPP_WARN(get_logger(), "local_costmap not available");
+        RCLCPP_WARN(get_logger(), "Local_costmap not available!");
 
     if (!planner_client_->wait_for_service(std::chrono::seconds(5)))
-        RCLCPP_WARN(get_logger(), "planner_server not available");
+        RCLCPP_WARN(get_logger(), "Planner_server not available!");
     
+    if(!reset_client_->wait_for_service(std::chrono::seconds(5)))
+        RCLCPP_WARN(get_logger(), "Reset client not available!");
+
     // ── Create subscriber ────────────────────────────────────────────────────
-    metrics_sub_ = create_subscription<tbot3_nav_monitor::msg::NavigationMetrics>(
-        "/navigation_metrics", 10,
+    metrics_sub_ = create_subscription<tbot3_nav_monitor::msg::NavigationMetrics>("/navigation_metrics", 10,
         std::bind(&AdaptiveController::metrics_callback, this, std::placeholders::_1));
+    goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>("/goal_pose", 10,
+        std::bind(&AdaptiveController::goal_send_callback, this, std::placeholders::_1));
 
     RCLCPP_INFO(get_logger(), "on_configure() called — node INACTIVE");
     return CallbackReturn::SUCCESS;
@@ -180,7 +187,9 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
     costmap_client_.reset();
     planner_client_.reset();
     metrics_sub_.reset();
+    goal_sub_.reset();
     nav2_client_.reset();
+    reset_client_.reset();
 
     // Reset window state
     window_count_            = 0;
@@ -199,31 +208,48 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
 //  ── Private method ─────────────────────
 void AdaptiveController::send_nav2_goal(const geometry_msgs::msg::PoseStamped & goal)
 {
-    if (!nav2_client_->wait_for_service(std::chrono::seconds(5)))
-    {
-        RCLCPP_WARN(get_logger(), "Nav2 Server not available");
-    }
+    if(!nav2_client_->wait_for_action_server(std::chrono::seconds(5)))
+        RCLCPP_WARN(get_logger(), "Nav2 action server not available!");
 
     nav2_msgs::action::NavigateToPose::Goal nav2_goal;
     nav2_goal.pose = goal;
 
-    RCLCPP_INFO(get_logger(), "Sending new Nav2 goal to the Service!")
+    // All the callbacks here
+    auto send_options = rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SendGoalOptions();
+    send_options.goal_response_callback = std::bind(&AdaptiveController::goal_response_callback, this, std::placeholders::_1);
+    send_options.feedback_callback      = std::bind(&AdaptiveController::feedback_callback, this, std::placeholders::_1, std::placeholders::_2);
+    send_options.result_callback        = std::bind(&AdaptiveController::result_callback, this, std::placeholders::_1);
+    
+    // Send a new Nav2 goal
+    RCLCPP_INFO(get_logger(), "Sending new Nav2 goal to the Service!");
+    nav2_client_->async_send_goal(nav2_goal, send_options); 
 
-    nav2_client_->async_send_goal( // Send a new Nav2 goal
-        nav2_goal,
-        std::bind(&AdaptiveController::goal_response_callback, this, std::placeholders::_1),
-        std::bind(&AdaptiveController::feedback_callback, this, std::placeholders::_1),
-        std::bind(&AdaptiveController::result_callback, this, std::placeholders::_1)   
+    // After sending a new goal the Srv client request the reset
+    auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+    // Send the request without waiting for the reply
+    reset_client_->async_send_request(request,
+        // SharedFuture is the future result
+        [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future)
+        {   // If the reply has arrived from the MetricCollector get it
+            if(future.get()->success) // success srv boolean
+            {
+                RCLCPP_INFO(get_logger(), "MetricCollector reset confirmed!");
+            }
+            else
+            {
+                RCLCPP_WARN(get_logger(), "MetricCollector reset failed!");
+            }
+        }
     );
 }
 
-void AdaptiveController::reset_goal_state()
+void AdaptiveController::reset_nav2_state()
 {
     nav2_state_.store(Nav2State::UNKNOWN);
 }
 
 //  ── Subscriber callback — all adaptive logic lives here ─────────────────────
-void AdaptiveController::goal_response_callback( const rclcpp_action::ClientGoalHandle<
+void AdaptiveController::goal_response_callback(const rclcpp_action::ClientGoalHandle<
         nav2_msgs::action::NavigateToPose>::SharedPtr goal_received)
 {
     if(!goal_received)
@@ -239,7 +265,7 @@ void AdaptiveController::goal_response_callback( const rclcpp_action::ClientGoal
 void AdaptiveController::feedback_callback(rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::SharedPtr,
     const std::shared_ptr<const nav2_msgs::action::NavigateToPose::Feedback> feedback)
 {
-    (void)feedback;
+    (void)feedback; //NOLINT
 }
 
 void AdaptiveController::result_callback(const rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::WrappedResult & result)
@@ -264,6 +290,13 @@ void AdaptiveController::result_callback(const rclcpp_action::ClientGoalHandle<n
         default:
             RCLCPP_INFO(get_logger(), "Nav2 UNKNOWN!");
     }
+}
+
+// ── Callbacks ────────────────────────────────
+
+void AdaptiveController::goal_send_callback(const std::shared_ptr<const geometry_msgs::msg::PoseStamped> & msg)
+{
+    send_nav2_goal(*msg);
 }
 
 void AdaptiveController::metrics_callback(
@@ -357,8 +390,8 @@ void AdaptiveController::metrics_callback(
 
         RCLCPP_INFO(get_logger(), "Goal reached — all Nav2 parameters restored to defaults");
         
-        // Reset goal state
-        reset_goal_state();
+        // Reset nav2 state
+        reset_nav2_state();
         
         return;
     }

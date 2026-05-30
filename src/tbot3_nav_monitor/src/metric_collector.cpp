@@ -70,6 +70,12 @@ MetricCollector::on_configure(const rclcpp_lifecycle::State & state)
                 std::bind(&MetricCollector::scanner_callback, this, std::placeholders::_1));
     cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>("/cmd_vel", 10,
                 std::bind(&MetricCollector::cmdvel_callback, this, std::placeholders::_1));
+    goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>("/goal_pose", 10,
+                std::bind(&MetricCollector::goal_send_callback, this, std::placeholders::_1));
+    
+    // Create Service
+    reset_srv_ = create_service<std_srvs::srv::Trigger>("/metric_collector/reset",
+                std::bind(&MetricCollector::reset_callback, this, std::placeholders::_1, std::placeholders::_2));
 
     RCLCPP_INFO(get_logger(), "on_configure() called, Node is still INACTIVE");
     return CallbackReturn::SUCCESS;
@@ -78,7 +84,7 @@ MetricCollector::on_configure(const rclcpp_lifecycle::State & state)
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 MetricCollector::on_activate(const rclcpp_lifecycle::State & state)
 {
-     rclcpp_lifecycle::LifecycleNode::on_activate(state);
+    rclcpp_lifecycle::LifecycleNode::on_activate(state);
 
     // Activate lifecycle publisher (explicit call)
     metrics_pub_->on_activate();
@@ -91,7 +97,6 @@ MetricCollector::on_activate(const rclcpp_lifecycle::State & state)
 
     RCLCPP_INFO(get_logger(), "on_activate() called, Node is now ACTIVE");
     return CallbackReturn::SUCCESS;
-
 }
 
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
@@ -117,6 +122,8 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     odom_sub_.reset();
     scan_sub_.reset();
     cmd_vel_sub_.reset();
+    reset_srv_.reset();
+    goal_sub_.reset();
 
     // Reset state
     distance_traveled_    = 0.0;
@@ -137,28 +144,28 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
 
 void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::Odometry> & msg)
 {
+    // Thread-Safe
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
     const double new_x = msg->pose.pose.position.x;
     const double new_y = msg->pose.pose.position.y;
 
     if (!odom_received_) 
     {
-        // First msg — start and optimal path
+        // Save the start position 
         start_.x = new_x;
         start_.y = new_y;
-        const double dx = target_.x - start_.x;
-        const double dy = target_.y - start_.y;
-        optimal_path_ = std::sqrt(dx * dx + dy * dy);
     }
     else
     {
         const double dx   = new_x - prev_odom_x_;
         const double dy   = new_y - prev_odom_y_;
-        const double step = std::sqrt(dx * dx + dy * dy);
+        const double step = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));
         distance_traveled_ += step;
         last_step_ = step;
 
         // If one changed, the robot is in motion otherwhise the position has not changed the robot is stucked
-        odom_position_unchanged_.store(new_x == prev_odom_x_ && new_y == prev_odom_y_);
+        odom_position_unchanged_ = (new_x == prev_odom_x_ && new_y == prev_odom_y_);
     }
 
     prev_odom_x_ = new_x;
@@ -180,6 +187,8 @@ void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::O
 
 void MetricCollector::scanner_callback(const std::shared_ptr<const sensor_msgs::msg::LaserScan> & msg)
 {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
     sensor_ranges_    = msg->ranges; // Laser distances for every angle
     sensor_range_min_ = msg->range_min;
     sensor_range_max_ = msg->range_max;// values < min > max should be discarder
@@ -188,8 +197,66 @@ void MetricCollector::scanner_callback(const std::shared_ptr<const sensor_msgs::
 
 void MetricCollector::cmdvel_callback(const std::shared_ptr<const geometry_msgs::msg::Twist> & msg)
 {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
     last_cmd_vel_     = *msg; // Deference of the twist shared_ptr
     cmd_vel_received_ = true;
+}
+
+ void MetricCollector::goal_send_callback(const std::shared_ptr<const geometry_msgs::msg::PoseStamped> & msg)
+ {
+    // Thread-Safe
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    
+    //Update target position with the sent goal
+    target_.x = msg->pose.position.x;
+    target_.y = msg->pose.position.y;
+
+    // Updated the target theta from quaternion
+    tf2::Quaternion q(
+        msg->pose.orientation.x,
+        msg->pose.orientation.y,
+        msg->pose.orientation.z,
+        msg->pose.orientation.w
+    );
+    double roll, pitch, yaw;
+    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+    target_.theta = yaw;
+
+    // Re-calculate optimal path with new target
+        if (odom_received_)
+    {
+        const double dx = target_.x - start_.x;
+        const double dy = target_.y - start_.y;
+        optimal_path_ = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));
+    }
+    
+    RCLCPP_INFO(get_logger(), "Target updated: (%.2f, %.2f, %.2f)",
+            target_.x, target_.y, target_.theta);
+}
+
+// ── Service Callback ────────────────────────────────────────────────
+
+void MetricCollector::reset_callback(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+{
+    // Thread-Safe access on these variable (concurrent variable btw callback and control loop)
+    // lock_guard for automatic Lock/Unlock of the mutex (it’s exception-safe)
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
+    // Reset tutto lo stato per la prossima navigazione
+    distance_traveled_    = 0.0;
+    battery_consumption_  = 0.0;
+    recovery_count_       = 0;
+    last_step_            = 0.0;
+    goal_reached_         = false;
+    odom_received_        = false;  
+    sensor_received_      = false;
+    cmd_vel_received_     = false;
+
+    response->success = true;
+    response->message = "MetricCollector reset for next goal";
+    RCLCPP_INFO(get_logger(), "Reset triggered — ready for next navigation goal!");
 }
 
 // ── Helper methods  ────────────────────────────────────────────────
@@ -242,10 +309,11 @@ bool MetricCollector::collision_detection()
 }
 
 // Control loop function (called by the timer)
+// The timer calls this function repeatedly
 void MetricCollector::control_loop()
 {
-    
-    // The timer calls this function repeatedly
+    // Thread-Safe access on these variable
+    std::lock_guard<std::mutex> lock(state_mutex_);
 
     // Wait until all sensor streams have been received at least once
     if (!odom_received_ || !sensor_received_ || !cmd_vel_received_) return;
@@ -259,7 +327,7 @@ void MetricCollector::control_loop()
         // Publish a zero-velocity command to stop the robot
         // Recovery: if cmd_vel was non-zero but robot did not move the robot is stucked
         if ((last_cmd_vel_.linear.x  != 0.0 || last_cmd_vel_.angular.z != 0.0) 
-            && odom_position_unchanged_.load())
+            && odom_position_unchanged_)
         {
             recovery_count_++;
             RCLCPP_WARN(get_logger(), "Recovery event #%d detected, Robot is STUCKED!", recovery_count_);

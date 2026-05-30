@@ -19,28 +19,35 @@ int main(int argc, char * argv[])
     auto metric_node      = std::make_shared<tbot3_nav_monitor::MetricCollector>("metric_collector_node", options);
     auto adaptive_node    = std::make_shared<tbot3_nav_monitor::AdaptiveController>("adaptive_controller_node", options);
     auto data_logger_node = std::make_shared<tbot3_nav_monitor::DataLogger>("data_logger_node", options);
+    
+    // Add the nodes to the executor
+    rclcpp::executors::MultiThreadedExecutor executor;
+    executor.add_node(metric_node->get_node_base_interface());   // rclccpp lifecycle nodes
+    executor.add_node(adaptive_node->get_node_base_interface()); // rclccpp lifecycle nodes
+    executor.add_node(data_logger_node);                         // rclcpp node
 
-    // Configure MetricCollector 
-    metric_node->configure();
-    metric_node->activate();
-
-    // Configure AdaptiveController — check because it has Nav2 client dependencies
+    // Check for the on_configure method
+    if (metric_node->configure().id() != lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE)
+    {
+        RCLCPP_ERROR(rclcpp::get_logger("main"), "MetricCollector on_configure failed!");
+        rclcpp::shutdown();
+        return 1;
+    }
     if (adaptive_node->configure().id() != lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE)
     {
         RCLCPP_ERROR(rclcpp::get_logger("main"), "AdaptiveController on_configure failed!");
         rclcpp::shutdown();
         return 1;
     }
-    adaptive_node->activate();
 
-    // Spin the nodes together
-    rclcpp::executors::MultiThreadedExecutor executor;
-    executor.add_node(metric_node->get_node_base_interface());   // rclccpp lifecycle nodes
-    executor.add_node(adaptive_node->get_node_base_interface()); // rclccpp lifecycle nodes
-    executor.add_node(data_logger_node);                        // rclcpp node
+    // Activate node before spinning them
+    adaptive_node->activate();
+    metric_node->activate();
+
+    // Spin all the three nodes in the same process with a single thread for each core
     executor.spin();
 
-    // Clean shutdown
+    // Clean and Deactivate
     metric_node->deactivate();
     metric_node->cleanup();
     adaptive_node->deactivate();

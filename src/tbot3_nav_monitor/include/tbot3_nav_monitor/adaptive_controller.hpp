@@ -5,8 +5,10 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
 #include "tbot3_nav_monitor/msg/navigation_metrics.hpp"
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include <memory>
 #include <string>
@@ -67,24 +69,24 @@ protected:
 
 private:
     // ── Thresholds ───────────────────────────────────────────────────────────
-    int    recovery_threshold_;     ///< Max recovery count before reducing velocity
-    double accuracy_threshold_;     ///< Min mean accuracy before relaxing goal tolerance
-    double efficiency_threshold_;   ///< Min efficiency [0,1] before switching to conservative plan
-    double obstacle_threshold_;     ///< Min mean obstacle proximity before adjusting costmap
-    int    window_size_;            ///< Number of messages per evaluation window
+    int    recovery_threshold_;               ///< Max recovery count before reducing velocity
+    double accuracy_threshold_;               ///< Min mean accuracy before relaxing goal tolerance
+    double efficiency_threshold_;             ///< Min efficiency [0,1] before switching to conservative plan
+    double obstacle_threshold_;               ///< Min mean obstacle proximity before adjusting costmap
+    int    window_size_;                      ///< Number of messages per evaluation window
 
     // ── Window state ─────────────────────────────────────────────────────────
-    int    window_count_             = 0;   ///< Messages accumulated in current window
-    double sum_accuracy_             = 0.0; ///< Accuracy accumulator for current window
-    double sum_obstacle_proximity_   = 0.0; ///< Obstacle proximity accumulator for current window
-    double mean_accuracy_            = 0.0; ///< Mean accuracy over last window
-    double mean_obstacle_proximity_  = 0.0; ///< Mean obstacle proximity over last window
+    int    window_count_             = 0;     ///< Messages accumulated in current window
+    double sum_accuracy_             = 0.0;   ///< Accuracy accumulator for current window
+    double sum_obstacle_proximity_   = 0.0;   ///< Obstacle proximity accumulator for current window
+    double mean_accuracy_            = 0.0;   ///< Mean accuracy over last window
+    double mean_obstacle_proximity_  = 0.0;   ///< Mean obstacle proximity over last window
 
     // ── Efficiency ───────────────────────────────────────────────────────────
-    double efficiency_               = 0.0; ///< optimal_path / distance_traveled → [0, 1]
+    double efficiency_               = 0.0;   ///< optimal_path / distance_traveled → [0, 1]
 
     // ── Goal Reached booleans ────────────────────────────────────────────────
-    bool prev_goal_reached_          = false;
+    bool prev_goal_reached_          = false; ///< Check for the prev bool goal received
 
     // ── Nav2 Params ──────────────────────────────────────────────────────────
     /**
@@ -92,6 +94,7 @@ private:
             * - std::atomic ensures thread-safe access to the variables (no mutex needed for simple types)
             * - std::atomic prevents the data race
             * - .load() to read, .store() to write
+            * - allows concurrent threads to read/write without waiting for each other
     */
 
     enum Nav2State : uint8_t
@@ -104,17 +107,24 @@ private:
 
     std::atomic<Nav2State> nav2_state_{Nav2State::UNKNOWN}; // Default value
 
-    // ── Subscriber and Nav2 parameter clients ────────────────────────────────
+    // ── Subscriber, Srv Client and Nav2 Client ───────────────────────────────
     rclcpp::Subscription<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr metrics_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
+
     rclcpp::AsyncParametersClient::SharedPtr controller_client_;
     rclcpp::AsyncParametersClient::SharedPtr costmap_client_;
     rclcpp::AsyncParametersClient::SharedPtr planner_client_;
 
     rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SharedPtr nav2_client_;
-
+    rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr reset_client_;
+    
     // ── Private methods and Callbacks ────────────────────────────────────────
+    
+    /// @brief Callback for subscribing the sent goal to the goal_pose topic
+    /// @param msg PoseStamped message
+    void goal_send_callback(const std::shared_ptr<const geometry_msgs::msg::PoseStamped> & msg);
 
-    /// @brief Reads NavigationMetrics and applies adaptive logic
+    /// @brief Callback for reading NavigationMetrics and applies adaptive logic
     /// @param msg Incoming NavigationMetrics message
     void metrics_callback(const std::shared_ptr<const tbot3_nav_monitor::msg::NavigationMetrics> & msg);
 
@@ -122,19 +132,21 @@ private:
     /// @param goal New goal to send
     void send_nav2_goal(const geometry_msgs::msg::PoseStamped & goal);
     
-    /// @brief Method to reset goal variables
-    /// @param msg Incoming NavigationMetrics message
-    void reset_goal_state();
+    /// @brief Method to reset nav2 state
+    void reset_nav2_state();
 
     /// @brief Callback for Nav2 goal reached result
     /// @param result Nav2 State result
     void result_callback(const rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::WrappedResult & result);
 
+    /// @brief Callback for Nav2 goal response
+    /// @param goal_received NavigateToPose msg goal received from nav2 service
     void goal_response_callback(const rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::SharedPtr goal_received);
 
+    /// @brief Callback for Nav2 intermediate feedback
+    /// @param feedback NavigateToPose msg feedback received from nav2 service
     void feedback_callback(rclcpp_action::ClientGoalHandle<nav2_msgs::action::NavigateToPose>::SharedPtr,
         const std::shared_ptr<const nav2_msgs::action::NavigateToPose::Feedback> feedback);
-
 };
 
 }  // namespace tbot3_nav_monitor
