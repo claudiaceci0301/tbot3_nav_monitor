@@ -15,6 +15,6 @@ def generate_launch_description():
             executable='metric_collector',
             parameters=[config],
             output='screen',
-            //arguments=['--ros-args', '--log-level', 'debug']
+            #arguments=['--ros-args', '--log-level', 'debug']
         )
     ])
