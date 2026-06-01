@@ -25,7 +25,7 @@ MetricCollector::MetricCollector(const std::string & node_name, const rclcpp::No
     declare_parameter("target_theta",                 0.75); 
     declare_parameter("distance_tolerance",            2.3); 
     declare_parameter("obstacle_distance_tolerance",  0.15); 
-    declare_parameter("angle_tolerance",              0.25); 
+    declare_parameter("angle_tolerance",               1.5); 
     declare_parameter("max_linear_vel",                0.3);
     declare_parameter("max_angular_vel",               1.0); 
     declare_parameter("linear_gain",                   0.5);
@@ -208,6 +208,7 @@ void MetricCollector::cmdvel_callback(const std::shared_ptr<const geometry_msgs:
 
  void MetricCollector::goal_send_callback(const std::shared_ptr<const geometry_msgs::msg::PoseStamped> & msg)
  {
+    // This method recieves the new goal and updates the params
     // Thread-Safe
     std::lock_guard<std::mutex> lock(state_mutex_);
 
@@ -368,18 +369,15 @@ void MetricCollector::control_loop()
     "CHECK: dist=%.3f tol=%.3f angle_diff=%.3f angle_tol=%.3f",
     distance, distance_tolerance_, angle_difference, angle_tolerance_);
 
-    // Geometry check 
+    // Geometry check - Backup check 
     if (distance <= distance_tolerance_ && std::abs(angle_difference) <= angle_tolerance_)
     {
-        goal_reached_ = true;
+        //goal_reached_ = true;
         RCLCPP_INFO(get_logger(),
         "GOAL REACHED! Final position: (%.3f, %.3f, %.3f)",
         current_.x, current_.y, current_.theta);
     }
-
-    //if(nav2_state_.load() == Nav2State::SUCCEEDED && geometry_stable_)
     
-
     // ── Build NavigationMetrics message and publish ──────────────────────────
     tbot3_nav_monitor::msg::NavigationMetrics metrics_msg;
 
@@ -397,7 +395,7 @@ void MetricCollector::control_loop()
     metrics_msg.optimal_path                = optimal_path_;
     metrics_msg.header.stamp                = this->get_clock()->now();
     metrics_msg.header.frame_id             = "base_footprint";
-    
+
     if (metrics_pub_->is_activated()) // If the node is active publish the custom msg
     {
         metrics_pub_->publish(metrics_msg);

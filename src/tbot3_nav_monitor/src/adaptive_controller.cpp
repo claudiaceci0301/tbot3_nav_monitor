@@ -155,6 +155,9 @@ AdaptiveController::on_configure(const rclcpp_lifecycle::State & state)
         std::bind(&AdaptiveController::metrics_callback, this, std::placeholders::_1));
     goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>("/goal_pose", 10,
         std::bind(&AdaptiveController::goal_send_callback, this, std::placeholders::_1));
+    
+    // Create Publisher
+    goal_status_pub_ = create_publisher<std_msgs::msg::UInt8>("/nav2_goal_status", 10);
 
     RCLCPP_INFO(get_logger(), "on_configure() called — node INACTIVE");
     return CallbackReturn::SUCCESS;
@@ -164,7 +167,10 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 AdaptiveController::on_activate(const rclcpp_lifecycle::State & state)
 {
     rclcpp_lifecycle::LifecycleNode::on_activate(state);
-    // No publisher or timer to activate in this node
+    
+    // Activate lifecycle publisher (explicit call)
+    goal_status_pub_->on_activate();
+
     RCLCPP_INFO(get_logger(), "on_activate() called — node ACTIVE");
     return CallbackReturn::SUCCESS;
 }
@@ -173,6 +179,9 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 AdaptiveController::on_deactivate(const rclcpp_lifecycle::State & state)
 {
     rclcpp_lifecycle::LifecycleNode::on_deactivate(state);
+    
+    // Deactivate lifecycle publisher (explicit call)
+    goal_status_pub_->on_dactivate();
     RCLCPP_INFO(get_logger(), "on_deactivate() called — node INACTIVE");
     return CallbackReturn::SUCCESS;
 }
@@ -190,6 +199,7 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
     goal_sub_.reset();
     nav2_client_.reset();
     reset_client_.reset();
+    goal_status_pub_.reset();
 
     // Reset window state
     window_count_            = 0;
@@ -276,23 +286,31 @@ void AdaptiveController::result_callback(const rclcpp_action::ClientGoalHandle<n
     // std::atomic used - Thread-safe state shared between callbacks and control loop
     using ResultCode = rclcpp_action::ResultCode;
 
+    // Publish the result msg
+    auto status_msg = std_msgs::msg::UInt8();
+
     switch(result.code)
     {
         case ResultCode::SUCCEEDED:
             nav2_state_.store(Nav2State::SUCCEEDED);
+            status_msg.msg = static_cast<uint8_t>(Nav2State::SUCCEDED);
             RCLCPP_INFO(get_logger(), "Nav2 SUCCEDED - GOAL REACHED!");
             break;
         case ResultCode::ABORTED:
             nav2_state_.store(Nav2State::ABORTED);
+            status_msg.msg = static_cast<uint8_t>(Nav2State::ABORTED);
             RCLCPP_INFO(get_logger(), "Nav2 ABORTED!");
             break;
         case ResultCode::CANCELED:
             nav2_state_.store(Nav2State::CANCELED);
+            status_msg.msg = static_cast<uint8_t>(Nav2State::CANCELED);
             RCLCPP_INFO(get_logger(), "Nav2 CANCELED!");
             break;
         default:
             RCLCPP_INFO(get_logger(), "Nav2 UNKNOWN!");
     }
+
+    goal_status_pub_->publish(status_msg);
 }
 
 // ── Callbacks ────────────────────────────────

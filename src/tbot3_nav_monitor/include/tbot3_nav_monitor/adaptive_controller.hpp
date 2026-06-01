@@ -117,6 +117,8 @@ private:
 
     rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SharedPtr nav2_client_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr reset_client_;
+    // Publisher (to publish the Nav2 state SUCCEEDED)
+    rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr goal_status_pub_;
     
     // ── Private methods and Callbacks ────────────────────────────────────────
     

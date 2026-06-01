@@ -134,6 +134,7 @@ private:
     rclcpp::TimerBase::SharedPtr timer_;
 
     std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<tbot3_nav_monitor::msg::NavigationMetrics>> metrics_pub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr goal_status_pub_;
 
     // ── Service ─────────────────────────────────────────────────────────────
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;

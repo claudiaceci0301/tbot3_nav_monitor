@@ -111,7 +111,7 @@ metric_collector_node:
     target_theta: 0.75
     distance_tolerance: 2.3
     obstacle_distance_tolerance: 0.15
-    angle_tolerance: 0.25
+    angle_tolerance: 1.5 #1.5 rad = pi/2
     max_linear_vel: 0.3
     max_angular_vel: 1.0
     linear_gain: 0.5
