@@ -236,7 +236,7 @@ void MetricCollector::cmdvel_callback(const std::shared_ptr<const geometry_msgs:
     try {
         // Tranform(input, output, target_frame)
         // Transform the pose in odom frame
-        tf_buffer_->transform(*msg, goal_in_odom, "odom",
+        tf2_buffer_->transform(*msg, goal_in_odom, "odom",
             tf2::durationFromSec(0.1));
 
         // Thread-Safe

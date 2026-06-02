@@ -135,7 +135,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
-    rclcpp::Subscription<std_msgs::msg::UInt8> goal_status_sub_;
+    rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr goal_status_sub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 

@@ -322,17 +322,19 @@ void AdaptiveController::result_callback(const rclcpp_action::ClientGoalHandle<n
 AdaptiveController::Nav2Params AdaptiveController::reset_to_normal() const
 {
     // Restore all default Nav2 parameters for next navigation
-    return Nav2Params{
-        .max_vel_x          = get_parameter("normal_max_vel_x").as_double(),
-        .max_vel_theta      = get_parameter("normal_max_vel_theta").as_double(),
-        .xy_goal_tolerance  = get_parameter("normal_xy_goal_tolerance").as_double(),
-        .yaw_goal_tolerance = get_parameter("normal_yaw_goal_tolerance").as_double(),
-        .inflation_radius   = get_parameter("normal_inflation_radius").as_double(),
-        .gridbase_tolerance = get_parameter("normal_gridbase_tolerance").as_double(),
-        .costmap_resolution = get_parameter("normal_costmap_resolution").as_double(),
-        .costmap_width      = get_parameter("normal_costmap_width").as_int(),
-        .costmap_height     = get_parameter("normal_costmap_height").as_int()
-    };  
+    Nav2Params p;
+
+    p.max_vel_x = get_parameter("normal_max_vel_x").as_double();
+    p.max_vel_theta = get_parameter("normal_max_vel_theta").as_double();
+    p.xy_goal_tolerance = get_parameter("normal_xy_goal_tolerance").as_double();
+    p.yaw_goal_tolerance = get_parameter("normal_yaw_goal_tolerance").as_double();
+    p.inflation_radius = get_parameter("normal_inflation_radius").as_double();
+    p.gridbase_tolerance = get_parameter("normal_gridbase_tolerance").as_double();
+    p.costmap_resolution = get_parameter("normal_costmap_resolution").as_double();
+    p.costmap_width = get_parameter("normal_costmap_width").as_int();
+    p.costmap_height = get_parameter("normal_costmap_height").as_int();
+
+    return p; 
 }
 
 // Adaptive logic here - compute the parameters concerning the logic
