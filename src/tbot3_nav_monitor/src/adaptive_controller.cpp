@@ -501,8 +501,71 @@ void AdaptiveController::metrics_callback(
         window_count_           = 0;
     }
 
-    // Compute desired nav2 params and push to Nav2 
+        // ─────────────────────────────────────────────
+    // ❗ NAV2 SAFE APPLY GATE
+    // ─────────────────────────────────────────────
+
     Nav2Params desired;
+
+    if (msg->goal_reached)
+    {
+        if (navigation_active_.exchange(false))
+        {
+            desired = reset_to_normal();
+            window_ready_ = false;
+        }
+        else
+        {
+            return;
+        }
+    }
+    else
+    {
+        if (!window_ready_)
+            return;
+
+        desired = compute_desired_params();
+    }
+
+    // ─────────────────────────────────────────────
+    //  CRITICAL FIX: RATE LIMIT + DIFF CHECK
+    // ─────────────────────────────────────────────
+
+    const rclcpp::Time now = this->now();
+
+    // Rate limit: avoid unstable behaviour (avoid nav2 overload)
+    // 0.5s = > 2Hz
+    if ((now - last_apply_time_).seconds() < min_apply_interval_)
+        return;
+
+    // Check: Did these parameters truely changed?!
+    // This to avoid not usefull updates
+    auto changed = [&](const Nav2Params & a, const Nav2Params & b)
+    {
+        return
+            std::abs(a.max_vel_x - b.max_vel_x) > 1e-3 ||
+            std::abs(a.max_vel_theta - b.max_vel_theta) > 1e-3 ||
+            std::abs(a.inflation_radius - b.inflation_radius) > 1e-3 ||
+            std::abs(a.gridbase_tolerance - b.gridbase_tolerance) > 1e-3 ||
+            std::abs(a.xy_goal_tolerance - b.xy_goal_tolerance) > 1e-3 ||
+            std::abs(a.yaw_goal_tolerance - b.yaw_goal_tolerance) > 1e-3;
+    };
+
+    // If not changed skip
+    if (has_last_params_ && !changed(desired, last_applied_params_))
+        return;
+
+    // ── APPLY ONLY HERE ─────────────────────────────────────────────
+    apply_params(desired);
+
+    last_applied_params_ = desired;
+    has_last_params_ = true;
+    last_apply_time_ = now;
+
+
+    // Compute desired nav2 params and push to Nav2 
+   /*
+  Nav2Params desired;
 
     if (msg->goal_reached)
     {
@@ -532,7 +595,7 @@ void AdaptiveController::metrics_callback(
     }
 
     // ── SINGLE APPLY POINT ───────────────────────────────
-    apply_params(desired);
+    apply_params(desired); */ 
 }
 
 }  // namespace tbot3_nav_monitor
