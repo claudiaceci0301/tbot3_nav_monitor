@@ -109,9 +109,9 @@ metric_collector_node:
     target_x: 0.85
     target_y: 0.70
     target_theta: 0.75
-    distance_tolerance: 2.3
+    distance_tolerance: 0.25
     obstacle_distance_tolerance: 0.15
-    angle_tolerance: 1.5 #1.5 rad = pi/2
+    angle_tolerance: 0.4
     max_linear_vel: 0.3
     max_angular_vel: 1.0
     linear_gain: 0.5

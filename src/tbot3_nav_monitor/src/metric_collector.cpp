@@ -23,9 +23,9 @@ MetricCollector::MetricCollector(const std::string & node_name, const rclcpp::No
     declare_parameter("target_x",                     0.85); 
     declare_parameter("target_y",                     0.70); 
     declare_parameter("target_theta",                 0.75); 
-    declare_parameter("distance_tolerance",            2.3); 
+    declare_parameter("distance_tolerance",            0.25); 
     declare_parameter("obstacle_distance_tolerance",  0.15); 
-    declare_parameter("angle_tolerance",               1.5); 
+    declare_parameter("angle_tolerance",               0.4); 
     declare_parameter("max_linear_vel",                0.3);
     declare_parameter("max_angular_vel",               1.0); 
     declare_parameter("linear_gain",                   0.5);
@@ -64,19 +64,31 @@ MetricCollector::on_configure(const rclcpp_lifecycle::State & state)
     metrics_pub_ = create_publisher<tbot3_nav_monitor::msg::NavigationMetrics>("/navigation_metrics", 10);        
         
      // Create subscribers
-    odom_sub_ = create_subscription<nav_msgs::msg::Odometry>("/odom", 10,
-                std::bind(&MetricCollector::odom_callback, this, std::placeholders::_1));
-    scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>("/scan", 10,
-                std::bind(&MetricCollector::scanner_callback, this, std::placeholders::_1));
-    cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>("/cmd_vel", 10,
-                std::bind(&MetricCollector::cmdvel_callback, this, std::placeholders::_1));
-    goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>("/goal_pose", 10,
-                std::bind(&MetricCollector::goal_send_callback, this, std::placeholders::_1));
-    
+    odom_sub_       = create_subscription<nav_msgs::msg::Odometry>("/odom", 10,
+                        std::bind(&MetricCollector::odom_callback, this, std::placeholders::_1));
+    scan_sub_       = create_subscription<sensor_msgs::msg::LaserScan>("/scan", 10,
+                        std::bind(&MetricCollector::scanner_callback, this, std::placeholders::_1));
+    cmd_vel_sub_        = create_subscription<geometry_msgs::msg::Twist>("/cmd_vel", 10,
+                            std::bind(&MetricCollector::cmdvel_callback, this, std::placeholders::_1));
+    goal_sub_       = create_subscription<geometry_msgs::msg::PoseStamped>("/goal_pose", 10,
+                        std::bind(&MetricCollector::goal_send_callback, this, std::placeholders::_1));
+    goal_status_sub_ = create_subscription<std_msgs::msg::UInt8>("/nav2_goal_status", 10,
+                            [this](const std::shared_ptr<const std_msgs::msg::UInt8> msg){
+                                std::lock_guard<std::mutex> lock(state_mutex_);
+                                if(msg->data == 1) // Received nav2stat SUCCEEDED
+                                {
+                                    goal_reached_ = true;
+                                }
+                        });
+
     // Create Service
     reset_srv_ = create_service<std_srvs::srv::Trigger>("/metric_collector/reset",
                 std::bind(&MetricCollector::reset_callback, this, std::placeholders::_1, std::placeholders::_2));
-
+    
+    // Buffer params
+    tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
+    
     RCLCPP_INFO(get_logger(), "on_configure() called, Node is still INACTIVE");
     return CallbackReturn::SUCCESS;
 }
@@ -124,6 +136,9 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     cmd_vel_sub_.reset();
     reset_srv_.reset();
     goal_sub_.reset();
+    goal_status_sub_.reset();
+    tf2_listener_.reset();
+    tf2_buffer_.reset();
 
     // Reset state
     distance_traveled_    = 0.0;
@@ -163,12 +178,14 @@ void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::O
     {
         const double dx   = new_x - prev_odom_x_;
         const double dy   = new_y - prev_odom_y_;
-        const double step = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));
+        const double step = std::sqrt(dx*dx + dy*dy);
         distance_traveled_ += step;
         last_step_ = step;
 
         // If one changed, the robot is in motion otherwhise the position has not changed the robot is stucked
-        odom_position_unchanged_ = (new_x == prev_odom_x_ && new_y == prev_odom_y_);
+        constexpr double EPS = 1e-4; // If lower than EPS than the values are equal
+        odom_position_unchanged_ = std::abs(new_x - prev_odom_x_) < EPS &&
+                                    std::abs(new_y - prev_odom_y_) < EPS;
     }
 
     prev_odom_x_ = new_x;
@@ -209,38 +226,67 @@ void MetricCollector::cmdvel_callback(const std::shared_ptr<const geometry_msgs:
  void MetricCollector::goal_send_callback(const std::shared_ptr<const geometry_msgs::msg::PoseStamped> & msg)
  {
     // This method recieves the new goal and updates the params
-    // Thread-Safe
-    std::lock_guard<std::mutex> lock(state_mutex_);
 
     // DEBUG frame
     RCLCPP_INFO(get_logger(), "GOAL RECEIVED at frame=[%s] pos=(%.3f, %.3f)",
     msg->header.frame_id.c_str(), msg->pose.position.x, msg->pose.position.y);
     
-    //Update target position with the sent goal
-    target_.x = msg->pose.position.x;
-    target_.y = msg->pose.position.y;
+    // Transformation between odom frame and map frame
+    geometry_msgs::msg::PoseStamped goal_in_odom;
+    try {
+        // Tranform(input, output, target_frame)
+        // Transform the pose in odom frame
+        tf_buffer_->transform(*msg, goal_in_odom, "odom",
+            tf2::durationFromSec(0.1));
 
-    // Updated the target theta from quaternion
-    tf2::Quaternion q(
-        msg->pose.orientation.x,
-        msg->pose.orientation.y,
-        msg->pose.orientation.z,
-        msg->pose.orientation.w
-    );
-    double roll, pitch, yaw;
-    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
-    target_.theta = yaw;
+        // Thread-Safe
+        std::lock_guard<std::mutex> lock(state_mutex_);
+
+        //Update target position with the sent goal
+        target_.x = goal_in_odom.pose.position.x;
+        target_.y = goal_in_odom.pose.position.y;
+
+        // Updated the target theta from quaternion
+        tf2::Quaternion q(
+            goal_in_odom.pose.orientation.x,
+            goal_in_odom.pose.orientation.y,
+            goal_in_odom.pose.orientation.z,
+            goal_in_odom.pose.orientation.w
+        );
+        double roll, pitch, yaw;
+        tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+        target_.theta = yaw;
+
+        RCLCPP_INFO(get_logger(), "Target updated in odom frame: (%.3f, %.3f, %.3f)",
+            target_.x, target_.y, target_.theta);
+
+    } catch (const tf2::TransformException & ex) {
+        RCLCPP_WARN(get_logger(), "[WARN] TF2 Transform failed: %s", ex.what());
+        
+        //fallback: goal without frame transform
+        target_.x = msg->pose.position.x;
+        target_.y = msg->pose.position.y;
+        tf2::Quaternion q(
+            msg->pose.orientation.x,
+            msg->pose.orientation.y,
+            msg->pose.orientation.z,
+            msg->pose.orientation.w
+        );
+        double roll, pitch, yaw;
+        tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+        target_.theta = yaw;
+
+        RCLCPP_DEBUG(get_logger(), "Target in map frame: (%.3f, %.3f, %.3f)",
+            target_.x, target_.y, target_.theta);
+    }
 
     // Re-calculate optimal path with new target
     if (odom_received_)
     {
         const double dx = target_.x - start_.x;
         const double dy = target_.y - start_.y;
-        optimal_path_ = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));
+        optimal_path_ = std::sqrt(dx*dx + dy*dy);
     }
-    
-    RCLCPP_INFO(get_logger(), "Target updated: (%.3f, %.3f, %.3f)",
-            target_.x, target_.y, target_.theta);
 }
 
 // ── Service Callback ────────────────────────────────────────────────
@@ -310,7 +356,7 @@ bool MetricCollector::collision_detection()
     if (min_distance_obstacle_ < obstacle_distance_tolerance_)
     {
         RCLCPP_WARN(get_logger(),
-            "Obstacle detected at %.3f [m], stop the robot robot!", min_distance_obstacle_);
+            "Obstacle detected at %.3f [m], stop the robot!", min_distance_obstacle_);
         return true; // Robot is in collision
     }
     return false;
@@ -334,7 +380,9 @@ void MetricCollector::control_loop()
     {
         // Publish a zero-velocity command to stop the robot
         // Recovery: if cmd_vel was non-zero but robot did not move the robot is stucked
-        if ((last_cmd_vel_.linear.x  != 0.0 || last_cmd_vel_.angular.z != 0.0) 
+        constexpr double CMD_EPS = 1e-3;
+        if((std::abs(last_cmd_vel_.linear.x) > CMD_EPS || 
+            std::abs(last_cmd_vel_.angular.z) > CMD_EPS) 
             && odom_position_unchanged_)
         {
             recovery_count_++;
@@ -347,7 +395,7 @@ void MetricCollector::control_loop()
     battery_consumption_  = std::min(battery_consumption_, battery_level_); // Avoid battery consumption > 100%
     
     // DEBUG before goal check to see if nav2 and metriccollector sees the same position
-    RCLCPP_INFO(
+    RCLCPP_DEBUG(
     get_logger(),
     "CURRENT=(%.3f %.3f %.3f) TARGET=(%.3f %.3f %.3f)",
     current_.x,
@@ -360,12 +408,13 @@ void MetricCollector::control_loop()
     // ── Goal check - Geometry check ───────────────────────────────────────────────────────────
     const double dx               = target_.x - current_.x;
     const double dy               = target_.y - current_.y;
-    const double distance         = std::sqrt(std::pow(dx, 2) + std::pow(dy, 2));  // Euclidean distance
+    const double distance         = std::sqrt(dx*dx + dy*dy);  // Euclidean distance
     //const double angle_to_target  = std::atan2(dy, dx);
     //const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
     const double angle_difference = normalize_angle(target_.theta - current_.theta);
-    // Check
-    RCLCPP_INFO(get_logger(),
+    
+    // DEBUG Check
+    RCLCPP_DEBUG(get_logger(),
     "CHECK: dist=%.3f tol=%.3f angle_diff=%.3f angle_tol=%.3f",
     distance, distance_tolerance_, angle_difference, angle_tolerance_);
 
@@ -391,10 +440,11 @@ void MetricCollector::control_loop()
     metrics_msg.current_theta               = current_.theta;
     metrics_msg.distance_to_goal            = distance;
     metrics_msg.distance_tolerance          = distance_tolerance_;
+    metrics_msg.angle_tolerance             = angle_tolerance_;
     metrics_msg.obstacle_distance_tolerance = obstacle_distance_tolerance_;
     metrics_msg.optimal_path                = optimal_path_;
     metrics_msg.header.stamp                = this->get_clock()->now();
-    metrics_msg.header.frame_id             = "base_footprint";
+    metrics_msg.header.frame_id             = "odom";
 
     if (metrics_pub_->is_activated()) // If the node is active publish the custom msg
     {

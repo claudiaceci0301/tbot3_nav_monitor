@@ -4,6 +4,10 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <rclcpp_lifecycle/lifecycle_publisher.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <std_msgs/msg/u_int8.hpp>
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
@@ -16,6 +20,7 @@
 #include <mutex> // for thread safe (avoid data race)
 #include <vector>
 #include <memory>
+#include <cmath> // Per std::abs
 
 namespace tbot3_nav_monitor
 {
@@ -130,17 +135,21 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
+    rclcpp::Subscription<std_msgs::msg::UInt8> goal_status_sub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
-    std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<tbot3_nav_monitor::msg::NavigationMetrics>> metrics_pub_;
-    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr goal_status_pub_;
+    rclcpp_lifecycle::LifecyclePublisher<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr metrics_pub_;
 
     // ── Service ─────────────────────────────────────────────────────────────
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;
 
     // ── Mutex Thread-Safe ───────────────────────────────────────────────────
     mutable std::mutex state_mutex_; ///< Thread-Safe access variable
+
+    // ── Buffer params ───────────────────────────────────────────────────────
+    std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;              // Container that memorize all the transforms
+    std::shared_ptr<tf2_ros::TransformListener> tf2_listener_; // Object that listen tf topics and fullfill the buffer
 
     // ── Private methods ─────────────────────────────────────────────────────
 

@@ -15,7 +15,8 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)                     
-find_package(tf2_ros REQUIRED)                 
+find_package(tf2_ros REQUIRED)  
+find_package(tf2_geometry_msgs REQUIRED)               
 find_package(lifecycle_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED) 
 find_package(std_srvs REQUIRED)
@@ -46,6 +47,7 @@ ament_target_dependencies(metric_collector
   std_msgs          
   nav2_msgs
   sensor_msgs
+  tf2_geometry_msgs
   tf2
   tf2_ros
   lifecycle_msgs
