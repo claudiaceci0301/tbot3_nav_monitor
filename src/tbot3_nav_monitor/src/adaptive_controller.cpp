@@ -208,7 +208,6 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
     mean_accuracy_           = 0.0;
     mean_obstacle_proximity_ = 0.0;
     efficiency_              = 0.0;
-    prev_goal_reached_       = false;
     window_ready_            = false;
     nav2_state_.store(Nav2State::UNKNOWN);
 
@@ -222,6 +221,8 @@ void AdaptiveController::send_nav2_goal(const geometry_msgs::msg::PoseStamped & 
     if(!nav2_client_->wait_for_action_server(std::chrono::seconds(5)))
         RCLCPP_WARN(get_logger(), "Nav2 action server not available!");
 
+    // Activate the robot navigation
+    navigation_active_.store(true);
     nav2_msgs::action::NavigateToPose::Goal nav2_goal;
     nav2_goal.pose = goal;
 
@@ -442,6 +443,9 @@ void AdaptiveController::metrics_callback(
     // Thread-Safe
     std::lock_guard<std::mutex> lock(state_mutex_);
 
+    // Nav2 state guard (if navigation is not active)
+    if(!navigation_active_.load()) return;
+
     // ── Read all fields from the message once ────────────────────────────────
     last_recovery_count_     = msg->recovery_count;
     last_obstacle_too_close_ = (msg->min_obstacle_distance < msg->obstacle_distance_tolerance);
@@ -495,17 +499,38 @@ void AdaptiveController::metrics_callback(
         window_count_           = 0;
     }
 
-    // Once goal reached: restore normal params and reset window state
-    if(msg->goal_reached)
+    // Compute desired nav2 params and push to Nav2 
+    Nav2Params desired;
+
+    if (msg->goal_reached)
     {
-        apply_params(reset_to_normal());
-        window_ready_ = false;
-        RCLCPP_INFO(get_logger(), "Goal reached — parameters restored to normal!");
+        if (navigation_active_.exchange(false))
+        {
+            desired = reset_to_normal();
+
+            window_ready_ = false;
+            sum_accuracy_ = 0.0;
+            sum_obstacle_proximity_ = 0.0;
+            window_count_ = 0;
+
+            RCLCPP_INFO(get_logger(), "Goal reached → reset params");
+        }
+        else
+        {
+            return;
+        }
+    }
+    else if (navigation_active_.load())
+    {
+        desired = compute_desired_params();
+    }
+    else
+    {
+        return;
     }
 
-    // Compute desired nav2 params and push to Nav2 
-    const Nav2Params desired_param = compute_desired_params();
-    apply_params(desired_param);
+    // ── SINGLE APPLY POINT ───────────────────────────────
+    apply_params(desired);
 }
 
 }  // namespace tbot3_nav_monitor

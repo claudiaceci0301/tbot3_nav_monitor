@@ -421,7 +421,6 @@ void MetricCollector::control_loop()
     // Geometry check - Backup check 
     if (distance <= distance_tolerance_ && std::abs(angle_difference) <= angle_tolerance_)
     {
-        //goal_reached_ = true;
         RCLCPP_INFO(get_logger(),
         "GOAL REACHED! Final position: (%.3f, %.3f, %.3f)",
         current_.x, current_.y, current_.theta);

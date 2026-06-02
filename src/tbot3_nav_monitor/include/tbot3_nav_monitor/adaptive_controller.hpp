@@ -69,15 +69,16 @@ protected:
     on_cleanup(const rclcpp_lifecycle::State & state) override;
 
 private:
-    // ── Thresholds ───────────────────────────────────────────────────────────
+    // ── Prive Params ───────────────────────────────────────────────────────────
     int    recovery_threshold_;               ///< Max recovery count before reducing velocity
     double accuracy_threshold_;               ///< Min mean accuracy before relaxing goal tolerance
     double efficiency_threshold_;             ///< Min efficiency [0,1] before switching to conservative plan
     double obstacle_threshold_;               ///< Min mean obstacle proximity before adjusting costmap
     int    window_size_;                      ///< Number of messages per evaluation window
     bool   window_ready_;                     ///< Bool for window ready, true when the window is full
-    int last_recovery_count_;                 ///< Last read recovery count from MetricController
-    bool last_obstacle_too_close_;            /// Bool to get the last obstacle too close
+    int    last_recovery_count_;              ///< Last read recovery count from MetricController
+    bool   last_obstacle_too_close_;          ///< Bool to get the last obstacle too close
+    std::atomic<bool> navigation_active_;     ///< Atomic bool to activate the navigation
     
     // ── Window state ─────────────────────────────────────────────────────────
     int    window_count_             = 0;     ///< Messages accumulated in current window
@@ -88,9 +89,6 @@ private:
 
     // ── Efficiency ───────────────────────────────────────────────────────────
     double efficiency_               = 0.0;   ///< optimal_path / distance_traveled → [0, 1]
-
-    // ── Goal Reached booleans ────────────────────────────────────────────────
-    bool prev_goal_reached_          = false; ///< Check for the prev bool goal received
 
     // ── Nav2 Params ──────────────────────────────────────────────────────────
     /**
