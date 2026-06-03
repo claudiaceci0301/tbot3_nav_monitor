@@ -202,13 +202,19 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
     goal_status_pub_.reset();
 
     // Reset window state
-    window_count_            = 0;
-    sum_accuracy_            = 0.0;
-    sum_obstacle_proximity_  = 0.0;
-    mean_accuracy_           = 0.0;
-    mean_obstacle_proximity_ = 0.0;
-    efficiency_              = 0.0;
-    window_ready_            = false;
+    window_count_               = 0;
+    sum_accuracy_               = 0.0;
+    sum_obstacle_proximity_     = 0.0;
+    mean_accuracy_              = 0.0;
+    mean_obstacle_proximity_    = 0.0;
+    efficiency_                 = 0.0;
+    window_ready_               = false;
+    last_recovery_count_        = 0;
+    last_obstacle_too_close_    = false;
+    navigation_active_.store(false);
+    has_last_controller_params_ = false;
+    has_last_costmap_params_    = false;
+    has_last_planner_params_    = false;
     nav2_state_.store(Nav2State::UNKNOWN);
 
     RCLCPP_INFO(get_logger(), "on_cleanup() called — node UNCONFIGURED");
@@ -416,25 +422,70 @@ AdaptiveController::Nav2Params AdaptiveController::compute_desired_params() cons
 
 
 // Translates a Nav2Params into three async set_parameters calls, one per Nav2 server, once per decision cycle
-void AdaptiveController::apply_params(const Nav2Params & param) 
+// In apply_params: Diff and Rate limit check
+void AdaptiveController::apply_params(const Nav2Params & param)
 {
-    controller_client_->set_parameters({
-        rclcpp::Parameter("FollowPath.max_vel_x",                    param.max_vel_x),
-        rclcpp::Parameter("FollowPath.max_vel_theta",                param.max_vel_theta),
-        rclcpp::Parameter("general_goal_checker.xy_goal_tolerance",  param.xy_goal_tolerance),
-        rclcpp::Parameter("general_goal_checker.yaw_goal_tolerance", param.yaw_goal_tolerance)
-    });
+    const rclcpp::Time now = this->now(); // RCL_ROS_TIME colck type
 
-    costmap_client_->set_parameters({
-        rclcpp::Parameter("inflation_layer.inflation_radius", param.inflation_radius),
-        rclcpp::Parameter("resolution",                       param.costmap_resolution),
-        rclcpp::Parameter("width",                            param.costmap_width),
-        rclcpp::Parameter("height",                           param.costmap_height)
-    });
+    // ── Controller ───────────────────────────────────────────────────────────
+    const bool ctrl_changed =
+        !has_last_controller_params_ ||
+        std::abs(param.max_vel_x          - last_controller_params_.max_vel_x)          > 1e-3 ||
+        std::abs(param.max_vel_theta      - last_controller_params_.max_vel_theta)      > 1e-3 ||
+        std::abs(param.xy_goal_tolerance  - last_controller_params_.xy_goal_tolerance)  > 1e-3 ||
+        std::abs(param.yaw_goal_tolerance - last_controller_params_.yaw_goal_tolerance) > 1e-3;
 
-    planner_client_->set_parameters({
-        rclcpp::Parameter("GridBased.tolerance", param.gridbase_tolerance)
-    });
+    if (ctrl_changed &&
+        (now - last_controller_apply_time_).seconds() >= controller_apply_interval_)
+    {
+        controller_client_->set_parameters({
+            rclcpp::Parameter("FollowPath.max_vel_x",                    param.max_vel_x),
+            rclcpp::Parameter("FollowPath.max_vel_theta",                param.max_vel_theta),
+            rclcpp::Parameter("general_goal_checker.xy_goal_tolerance",  param.xy_goal_tolerance),
+            rclcpp::Parameter("general_goal_checker.yaw_goal_tolerance", param.yaw_goal_tolerance)
+        });
+        last_controller_params_      = param;
+        last_controller_apply_time_  = now;
+        has_last_controller_params_  = true;
+    }
+
+    // ── Costmap ───────────────────────────────────────────────────────────────
+    const bool cmap_changed =
+        !has_last_costmap_params_ ||
+        std::abs(param.inflation_radius   - last_costmap_params_.inflation_radius)   > 1e-3 ||
+        std::abs(param.costmap_resolution - last_costmap_params_.costmap_resolution) > 1e-3 ||
+        param.costmap_width  != last_costmap_params_.costmap_width  ||
+        param.costmap_height != last_costmap_params_.costmap_height;
+
+    if (cmap_changed &&
+        (now - last_costmap_apply_time_).seconds() >= costmap_apply_interval_)
+    {
+        costmap_client_->set_parameters({
+            rclcpp::Parameter("inflation_layer.inflation_radius", param.inflation_radius),
+            rclcpp::Parameter("resolution",                       param.costmap_resolution),
+            rclcpp::Parameter("width",                            param.costmap_width),
+            rclcpp::Parameter("height",                           param.costmap_height)
+        });
+        last_costmap_params_     = param;
+        last_costmap_apply_time_ = now;
+        has_last_costmap_params_ = true;
+    }
+
+    // ── Planner ───────────────────────────────────────────────────────────────
+    const bool plan_changed =
+        !has_last_planner_params_ ||
+        std::abs(param.gridbase_tolerance - last_planner_params_.gridbase_tolerance) > 1e-3;
+
+    if (plan_changed &&
+        (now - last_planner_apply_time_).seconds() >= planner_apply_interval_)
+    {
+        planner_client_->set_parameters({
+            rclcpp::Parameter("GridBased.tolerance", param.gridbase_tolerance)
+        });
+        last_planner_params_     = param;
+        last_planner_apply_time_ = now;
+        has_last_planner_params_ = true;
+    }
 }
 
 // ── Main Metric Callback Here ────────────────────────────────
@@ -501,101 +552,21 @@ void AdaptiveController::metrics_callback(
         window_count_           = 0;
     }
 
-        // ─────────────────────────────────────────────
-    // ❗ NAV2 SAFE APPLY GATE
-    // ─────────────────────────────────────────────
-
-    Nav2Params desired;
-
+    // GOAL REACHED ?!
     if (msg->goal_reached)
     {
         if (navigation_active_.exchange(false))
         {
-            desired = reset_to_normal();
+            apply_params(reset_to_normal());
             window_ready_ = false;
+            RCLCPP_INFO(get_logger(), "Goal reached — parameters restored to normal");
         }
-        else
-        {
-            return;
-        }
-    }
-    else
-    {
-        if (!window_ready_)
-            return;
-
-        desired = compute_desired_params();
+        return; // Exit from loop
     }
 
-    // ─────────────────────────────────────────────
-    //  CRITICAL FIX: RATE LIMIT + DIFF CHECK
-    // ─────────────────────────────────────────────
-
-    const rclcpp::Time now = this->now();
-
-    // Rate limit: avoid unstable behaviour (avoid nav2 overload)
-    // 0.5s = > 2Hz
-    if ((now - last_apply_time_).seconds() < min_apply_interval_)
-        return;
-
-    // Check: Did these parameters truely changed?!
-    // This to avoid not usefull updates
-    auto changed = [&](const Nav2Params & a, const Nav2Params & b)
-    {
-        return
-            std::abs(a.max_vel_x - b.max_vel_x) > 1e-3 ||
-            std::abs(a.max_vel_theta - b.max_vel_theta) > 1e-3 ||
-            std::abs(a.inflation_radius - b.inflation_radius) > 1e-3 ||
-            std::abs(a.gridbase_tolerance - b.gridbase_tolerance) > 1e-3 ||
-            std::abs(a.xy_goal_tolerance - b.xy_goal_tolerance) > 1e-3 ||
-            std::abs(a.yaw_goal_tolerance - b.yaw_goal_tolerance) > 1e-3;
-    };
-
-    // If not changed skip
-    if (has_last_params_ && !changed(desired, last_applied_params_))
-        return;
-
-    // ── APPLY ONLY HERE ─────────────────────────────────────────────
+    // If goal not reached:
+    const Nav2Params desired = compute_desired_params();
     apply_params(desired);
-
-    last_applied_params_ = desired;
-    has_last_params_ = true;
-    last_apply_time_ = now;
-
-
-    // Compute desired nav2 params and push to Nav2 
-   /*
-  Nav2Params desired;
-
-    if (msg->goal_reached)
-    {
-        if (navigation_active_.exchange(false))
-        {
-            desired = reset_to_normal();
-
-            window_ready_ = false;
-            sum_accuracy_ = 0.0;
-            sum_obstacle_proximity_ = 0.0;
-            window_count_ = 0;
-
-            RCLCPP_INFO(get_logger(), "Goal reached → reset params");
-        }
-        else
-        {
-            return;
-        }
-    }
-    else if (navigation_active_.load())
-    {
-        desired = compute_desired_params();
-    }
-    else
-    {
-        return;
-    }
-
-    // ── SINGLE APPLY POINT ───────────────────────────────
-    apply_params(desired); */ 
 }
 
 }  // namespace tbot3_nav_monitor

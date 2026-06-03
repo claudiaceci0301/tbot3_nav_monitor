@@ -70,20 +70,20 @@ protected:
 
 private:
     // ── Prive Params ───────────────────────────────────────────────────────────
-    int    recovery_threshold_;               ///< Max recovery count before reducing velocity
-    double accuracy_threshold_;               ///< Min mean accuracy before relaxing goal tolerance
-    double efficiency_threshold_;             ///< Min efficiency [0,1] before switching to conservative plan
-    double obstacle_threshold_;               ///< Min mean obstacle proximity before adjusting costmap
-    int    window_size_;                      ///< Number of messages per evaluation window
-    int    last_recovery_count_;              ///< Last read recovery count from MetricController
-    bool   last_obstacle_too_close_;          ///< Bool to get the last obstacle too close
-    std::atomic<bool> navigation_active_;     ///< Atomic bool to activate the navigation
-    int    window_count_             = 0;     ///< Messages accumulated in current window
-    double sum_accuracy_             = 0.0;   ///< Accuracy accumulator for current window
-    double sum_obstacle_proximity_   = 0.0;   ///< Obstacle proximity accumulator for current window
-    double mean_accuracy_            = 0.0;   ///< Mean accuracy over last window
-    double mean_obstacle_proximity_  = 0.0;   ///< Mean obstacle proximity over last window
-    bool   window_ready_             = false; ///< Bool for window ready, true when the window is full
+    int    recovery_threshold_;                  ///< Max recovery count before reducing velocity
+    double accuracy_threshold_;                  ///< Min mean accuracy before relaxing goal tolerance
+    double efficiency_threshold_;                ///< Min efficiency [0,1] before switching to conservative plan
+    double obstacle_threshold_;                  ///< Min mean obstacle proximity before adjusting costmap
+    int    window_size_;                         ///< Number of messages per evaluation window
+    int    last_recovery_count_ = 0;             ///< Last read recovery count from MetricController
+    bool   last_obstacle_too_close_ = false;     ///< Bool to get the last obstacle too close
+    std::atomic<bool> navigation_active_{false}; ///< Atomic bool to activate the navigation
+    int    window_count_             = 0;        ///< Messages accumulated in current window
+    double sum_accuracy_             = 0.0;      ///< Accuracy accumulator for current window
+    double sum_obstacle_proximity_   = 0.0;      ///< Obstacle proximity accumulator for current window
+    double mean_accuracy_            = 0.0;      ///< Mean accuracy over last window
+    double mean_obstacle_proximity_  = 0.0;      ///< Mean obstacle proximity over last window
+    bool   window_ready_             = false;    ///< Bool for window ready, true when the window is full
 
     // ── Efficiency ───────────────────────────────────────────────────────────
     double efficiency_               = 0.0;   ///< optimal_path / distance_traveled → [0, 1]
@@ -107,7 +107,7 @@ private:
 
     std::atomic<Nav2State> nav2_state_{Nav2State::UNKNOWN}; // Default value
 
-    // ── Default Nav2 parameter ──────────────────────────────────
+    // ── Default Nav2 parameter ───────────────────────────────────────────────
     struct Nav2Params
     {
         double max_vel_x;
@@ -120,13 +120,21 @@ private:
         int    costmap_width;
         int    costmap_height;
     };
+    
+    // ── Private Time parameters : Diff and Rate Limit Check───────────────────
+    rclcpp::Time last_controller_apply_time_{0,0,RCL_ROS_TIME}; ///< ROS2 time for the controller (seconds, nanoseconds, clocktype)
+    rclcpp::Time last_costmap_apply_time_{0,0,RCL_ROS_TIME};    ///< ROS2 time for the costmap
+    rclcpp::Time last_planner_apply_time_{0,0,RCL_ROS_TIME};    ///< ROS2 time for the planner
+    Nav2Params last_controller_params_{};                       ///< Last param sent to Nav2 controller
+    Nav2Params last_costmap_params_{};                          ///< Last param sent to Nav2 costmap
+    Nav2Params last_planner_params_{};                          ///< Last param sent to Nav2 planner
+    bool has_last_controller_params_ = false;                   ///< Bool for did i send something to Nav2 controller ?!
+    bool has_last_costmap_params_ = false;                      ///< Bool for did i send something to Nav2 costmap ?!
+    bool has_last_planner_params_ = false;                      ///< Bool for did i send something to Nav2 planner ?!
+    double controller_apply_interval_ = 0.5;                    ///< Threshold time for nav2 controller (faster - 2Hz)
+    double costmap_apply_interval_    = 1.0;                    ///< Threshold time for nav2 costmap (middle - 1Hz)
+    double planner_apply_interval_    = 2.0;                    ///< Threshold time for nav2 planner (slower - 0.5Hz)
 
-    //////////////////
-    rclcpp::Time last_apply_time_;
-    Nav2Params last_applied_params_;
-    bool has_last_params_ = false;
-
-    double min_apply_interval_ = 0.5; // 2 Hz max
     // ── Subscriber, Srv Client and Nav2 Client ───────────────────────────────
     rclcpp::Subscription<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr metrics_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;

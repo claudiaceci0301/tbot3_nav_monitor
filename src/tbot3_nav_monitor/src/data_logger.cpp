@@ -178,26 +178,29 @@ void DataLogger::odom_rate_callback(const std::shared_ptr<const nav_msgs::msg::O
     // Tbot3 in general send odom msg with a rate of 30 Hz (30 times at second)
 
     odom_msg_count_++;
-    auto time_now = this->get_clock()->now();  // rclcpp::Time // It returns an std::chrono::time_point 
-    double elapsed = (time_now - last_odom_time_).seconds();
-    if (elapsed >= 1.0) // After 1 second
+    const auto time_now = this->get_clock()->now();
+    const double elapsed = (time_now - last_odom_time_).seconds();
+
+    if (elapsed >= 1.0)
     {
-        odom_rate_ = odom_msg_count_ / elapsed; // The accetable rate should be 30/s or similar
-        odom_msg_count_ = 0; // Reset value
-        last_odom_time_ = time_now;
+        odom_rate_           = odom_msg_count_ / elapsed;
+        odom_msg_count_      = 0;
+        last_odom_time_      = time_now;
         odom_rate_initialized_ = true;
     }
 
-    if(!odom_rate_initialized_) return; // If not inizialised
+    // If not initialized return
+    if (!odom_rate_initialized_) return;
 
-    if(odom_rate_ < odom_rate_alert_threshold_.at(1))
+    if (odom_rate_ < odom_rate_alert_threshold_.at(0))
     {
-        RCLCPP_WARN(get_logger(), " [WARN] Odom rate is low - Not reliable data!");
+        RCLCPP_ERROR(get_logger(), "[ERROR] Critical odom rate %.1f Hz — compromised navigation!", odom_rate_);
+        return;
     }
 
-    if(odom_rate_ < odom_rate_alert_threshold_.at(0))
+    if (odom_rate_ < odom_rate_alert_threshold_.at(1))
     {
-        RCLCPP_ERROR(get_logger(), " [ERROR] Critical odom rate - Compromised navigation!");
+        RCLCPP_WARN(get_logger(), "[WARN] Odom rate low %.1f Hz — unreliable data!", odom_rate_);
     }
 }
 

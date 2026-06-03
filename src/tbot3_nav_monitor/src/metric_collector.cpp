@@ -307,6 +307,7 @@ void MetricCollector::reset_callback(const std::shared_ptr<std_srvs::srv::Trigge
     odom_received_        = false;  
     sensor_received_      = false;
     cmd_vel_received_     = false;
+    min_distance_obstacle_ = std::numeric_limits<double>::max();
 
     response->success = true;
     response->message = "MetricCollector reset for next goal";
@@ -418,12 +419,14 @@ void MetricCollector::control_loop()
     "CHECK: dist=%.3f tol=%.3f angle_diff=%.3f angle_tol=%.3f",
     distance, distance_tolerance_, angle_difference, angle_tolerance_);
 
-    // Geometry check - Backup check 
-    if (distance <= distance_tolerance_ && std::abs(angle_difference) <= angle_tolerance_)
+    // Geometry check - fallback check - if AdaptiveController is down do a geometry check
+    if (!goal_reached_ && distance <= distance_tolerance_ &&
+        std::abs(angle_difference) <= angle_tolerance_)
     {
+        goal_reached_ = true;
         RCLCPP_INFO(get_logger(),
-        "GOAL REACHED! Final position: (%.3f, %.3f, %.3f)",
-        current_.x, current_.y, current_.theta);
+            "GOAL REACHED (geometry fallback) | pos=(%.3f, %.3f, %.3f)",
+            current_.x, current_.y, current_.theta);
     }
     
     // ── Build NavigationMetrics message and publish ──────────────────────────
