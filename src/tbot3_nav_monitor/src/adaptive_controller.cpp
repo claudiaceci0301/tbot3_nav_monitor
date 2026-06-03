@@ -100,7 +100,7 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     declare_parameter("increased_yaw_goal_tolerance",  0.35);
     declare_parameter("increased_inflation_radius",    0.6);
     declare_parameter("reduced_gridbase_tolerance",    0.25);
-    declare_parameter("increased_costmap_resolution",  0.1);
+    declare_parameter("increased_costmap_resolution",  0.08);
     declare_parameter("increased_costmap_width",       3);
     declare_parameter("increased_costmap_height",      3);
 
@@ -225,8 +225,11 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
 void AdaptiveController::send_nav2_goal(const geometry_msgs::msg::PoseStamped & goal)
 {
     if(!nav2_client_->wait_for_action_server(std::chrono::seconds(5)))
-        RCLCPP_WARN(get_logger(), "Nav2 action server not available!");
-
+    {     
+        RCLCPP_ERROR(get_logger(), "Nav2 action server not available!");
+        return;
+    }
+    
     // Activate the robot navigation
     navigation_active_.store(true);
     nav2_msgs::action::NavigateToPose::Goal nav2_goal;
@@ -395,9 +398,15 @@ AdaptiveController::Nav2Params AdaptiveController::compute_desired_params() cons
     {
         nav2_params.inflation_radius  = std::max(nav2_params.inflation_radius,
             get_parameter("increased_inflation_radius").as_double());
-        nav2_params.costmap_resolution = get_parameter("increased_costmap_resolution").as_double();
-        nav2_params.costmap_width      = get_parameter("increased_costmap_width").as_int();
-        nav2_params.costmap_height     = get_parameter("increased_costmap_height").as_int();
+        //nav2_params.costmap_resolution = get_parameter("increased_costmap_resolution").as_double();
+        //nav2_params.costmap_width      = get_parameter("increased_costmap_width").as_int();
+        //nav2_params.costmap_height     = get_parameter("increased_costmap_height").as_int();
+
+        // DEBUG
+        RCLCPP_WARN(
+        get_logger(),
+        "Updating inflation radius to %.2f",
+        nav2_params.inflation_radius);
 
         RCLCPP_WARN(get_logger(),
             "[Cond 3] Mean obstacle proximity %.3f < %.3f — costmap enlarged",
@@ -428,12 +437,13 @@ void AdaptiveController::apply_params(const Nav2Params & param)
     const rclcpp::Time now = this->now(); // RCL_ROS_TIME colck type
 
     // ── Controller ───────────────────────────────────────────────────────────
+
     const bool ctrl_changed =
         !has_last_controller_params_ ||
-        std::abs(param.max_vel_x          - last_controller_params_.max_vel_x)          > 1e-3 ||
-        std::abs(param.max_vel_theta      - last_controller_params_.max_vel_theta)      > 1e-3 ||
-        std::abs(param.xy_goal_tolerance  - last_controller_params_.xy_goal_tolerance)  > 1e-3 ||
-        std::abs(param.yaw_goal_tolerance - last_controller_params_.yaw_goal_tolerance) > 1e-3;
+        std::abs(param.max_vel_x - last_controller_params_.max_vel_x) > 0.02 ||          
+        std::abs(param.xy_goal_tolerance - last_controller_params_.xy_goal_tolerance) > 0.02 ||
+        std::abs(param.max_vel_theta - last_controller_params_.max_vel_theta) > 0.05 ||
+        std::abs(param.yaw_goal_tolerance - last_controller_params_.yaw_goal_tolerance) > 0.05;
 
     if (ctrl_changed &&
         (now - last_controller_apply_time_).seconds() >= controller_apply_interval_)
@@ -452,16 +462,21 @@ void AdaptiveController::apply_params(const Nav2Params & param)
     // ── Costmap ───────────────────────────────────────────────────────────────
     const bool cmap_changed =
         !has_last_costmap_params_ ||
-        std::abs(param.inflation_radius   - last_costmap_params_.inflation_radius)   > 1e-3 ||
-        std::abs(param.costmap_resolution - last_costmap_params_.costmap_resolution) > 1e-3 ||
-        param.costmap_width  != last_costmap_params_.costmap_width  ||
+        std::abs(param.inflation_radius - last_costmap_params_.inflation_radius) > 0.05 ||
+        std::abs(param.costmap_resolution - last_costmap_params_.costmap_resolution) > 0.01 ||
+        param.costmap_width != last_costmap_params_.costmap_width ||
         param.costmap_height != last_costmap_params_.costmap_height;
 
     if (cmap_changed &&
         (now - last_costmap_apply_time_).seconds() >= costmap_apply_interval_)
     {
+        RCLCPP_WARN(get_logger(),
+        "Applying costmap params: inflation=%.3f res=%.3f w=%d h=%d",
+        param.inflation_radius, param.costmap_resolution,
+        param.costmap_width, param.costmap_height);
+
         costmap_client_->set_parameters({
-            rclcpp::Parameter("inflation_layer.inflation_radius", param.inflation_radius),
+            rclcpp::Parameter("local_costmap.inflation_layer.inflation_radius", param.inflation_radius),
             rclcpp::Parameter("resolution",                       param.costmap_resolution),
             rclcpp::Parameter("width",                            param.costmap_width),
             rclcpp::Parameter("height",                           param.costmap_height)
@@ -474,7 +489,7 @@ void AdaptiveController::apply_params(const Nav2Params & param)
     // ── Planner ───────────────────────────────────────────────────────────────
     const bool plan_changed =
         !has_last_planner_params_ ||
-        std::abs(param.gridbase_tolerance - last_planner_params_.gridbase_tolerance) > 1e-3;
+        std::abs(param.gridbase_tolerance - last_planner_params_.gridbase_tolerance) > 0.02;
 
     if (plan_changed &&
         (now - last_planner_apply_time_).seconds() >= planner_apply_interval_)
@@ -512,24 +527,26 @@ void AdaptiveController::metrics_callback(
 
     // ── Efficiency [0, 1]: 1.0 = perfect straight path ──────────────────────
     if (distance_traveled > 0.0)
-    {
-        efficiency_ = std::clamp(optimal_path / distance_traveled, 0.0, 1.0);
+    {   
+        // std::max to avoid inf or nan when distance_traveled is initially 0
+        efficiency_ = std::clamp(optimal_path / std::max(distance_traveled, 1e-3), 0.0, 1.0);
     }
 
     // ── Window: accumulate accuracy and obstacle proximity ───────────────────
     // Only meaningful when the robot is near the goal
-    if (msg->goal_reached || distance_to_goal < 0.5 * distance_tolerance)
+    if (msg->goal_reached || distance_to_goal < distance_tolerance)
     {
         // Accuracy: 1 - relative error (clamped to [0, 1])
         const double relative_err = std::clamp(
-            std::abs((distance_to_goal - distance_tolerance) / distance_tolerance), 0.0, 1.0);
+            std::abs((distance_to_goal - distance_tolerance) 
+                    / distance_tolerance), 0.0, 1.0);
         sum_accuracy_ += 1.0 - relative_err;
 
         // Obstacle proximity: relative error of obstacle distance vs tolerance
         // High value → robot is too close to obstacles
         const double obstacle_err = std::clamp(
             std::abs((min_obstacle_distance - obstacle_distance_tolerance) 
-                        / obstacle_distance_tolerance), 0.0, 1.0);
+                    / obstacle_distance_tolerance), 0.0, 1.0);
         sum_obstacle_proximity_ += obstacle_err;
 
         window_count_++;
@@ -559,6 +576,9 @@ void AdaptiveController::metrics_callback(
         {
             apply_params(reset_to_normal());
             window_ready_ = false;
+            window_count_ = 0;
+            sum_accuracy_ = 0.0;
+            sum_obstacle_proximity_ = 0.0;
             RCLCPP_INFO(get_logger(), "Goal reached — parameters restored to normal");
         }
         return; // Exit from loop

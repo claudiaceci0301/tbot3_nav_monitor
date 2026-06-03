@@ -75,7 +75,8 @@ MetricCollector::on_configure(const rclcpp_lifecycle::State & state)
     goal_status_sub_ = create_subscription<std_msgs::msg::UInt8>("/nav2_goal_status", 10,
                             [this](const std::shared_ptr<const std_msgs::msg::UInt8> msg){
                                 std::lock_guard<std::mutex> lock(state_mutex_);
-                                if(msg->data == 1) // Received nav2stat SUCCEEDED
+                                nav2_state_ = msg->data;
+                                if(nav2_state_ == 1) // Received nav2stat SUCCEEDED
                                 {
                                     goal_reached_ = true;
                                 }
@@ -150,6 +151,8 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     odom_received_        = false;
     sensor_received_      = false;
     cmd_vel_received_     = false;
+    nav2_state_            = 0;
+    min_distance_obstacle_ = std::numeric_limits<double>::max();
 
     RCLCPP_INFO(get_logger(), "on_cleanup() is called, everything has been resetted the node is UNCONFIGURED");
     return CallbackReturn::SUCCESS;
@@ -183,7 +186,7 @@ void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::O
         last_step_ = step;
 
         // If one changed, the robot is in motion otherwhise the position has not changed the robot is stucked
-        constexpr double EPS = 1e-4; // If lower than EPS than the values are equal
+        constexpr double EPS = 1e-3; // If lower than EPS than the values are equal
         odom_position_unchanged_ = std::abs(new_x - prev_odom_x_) < EPS &&
                                     std::abs(new_y - prev_odom_y_) < EPS;
     }
@@ -237,7 +240,7 @@ void MetricCollector::cmdvel_callback(const std::shared_ptr<const geometry_msgs:
         // Tranform(input, output, target_frame)
         // Transform the pose in odom frame
         tf2_buffer_->transform(*msg, goal_in_odom, "odom",
-            tf2::durationFromSec(0.1));
+            tf2::durationFromSec(0.2));
 
         // Thread-Safe
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -327,31 +330,41 @@ bool MetricCollector::collision_detection()
 {
     if (sensor_ranges_.empty()) return false;
 
-    // Front-left sector  [0, n/4)
-    // Front-right sector [3n/4, n)
+    const size_t n = sensor_ranges_.size();
+
     // Values outside [range_min, range_max] are invalid skip them
-    auto valid = [&](float r) 
+    auto valid = [&](float r)
     {
         return std::isfinite(r) && r >= sensor_range_min_ && r <= sensor_range_max_;
     };
 
-    double left_min  = std::numeric_limits<double>::max();
-    double right_min = std::numeric_limits<double>::max();
+    double left_min   = std::numeric_limits<double>::max();
+    double center_min = std::numeric_limits<double>::max();
+    double right_min  = std::numeric_limits<double>::max();
 
-    for (std::size_t i = 0; i < sensor_ranges_.size() / 4; ++i)
-    {
-        if (valid(sensor_ranges_[i])) 
-        left_min = std::min(left_min, static_cast<double>(sensor_ranges_[i]));
-    }
-
-    for (std::size_t i = (3 * sensor_ranges_.size()) / 4; i < sensor_ranges_.size(); ++i)
+    // LEFT: [0, n/3]
+    for (size_t i = 0; i < n / 3; ++i)
     {
         if (valid(sensor_ranges_[i]))
-        right_min = std::min(right_min, static_cast<double>(sensor_ranges_[i]));
+            left_min = std::min(left_min, (double)sensor_ranges_[i]);
     }
-        
+
+    // CENTER (front): [n/3, 2n/3]
+    for (size_t i = n / 3; i < (2 * n) / 3; ++i)
+    {
+        if (valid(sensor_ranges_[i]))
+            center_min = std::min(center_min, static_cast<double>(sensor_ranges_[i]));
+    }
+
+    // RIGHT: [2n/3, n]
+    for (size_t i = (2 * n) / 3; i < n; ++i)
+    {
+        if (valid(sensor_ranges_[i]))
+            right_min = std::min(right_min, static_cast<double>(sensor_ranges_[i]));
+    }
+
     // Global minimum distance
-    min_distance_obstacle_ = std::min(left_min, right_min);
+    min_distance_obstacle_ = std::min({left_min, center_min, right_min});
         
     // Check for collision
     if (min_distance_obstacle_ < obstacle_distance_tolerance_)
@@ -373,8 +386,44 @@ void MetricCollector::control_loop()
     // Wait until all sensor streams have been received at least once
     if (!odom_received_ || !sensor_received_ || !cmd_vel_received_) return;
 
-    // Stop if goal already reached or battery flat
-    if (goal_reached_ || battery_consumption_ >= battery_level_) return;
+    // ── Geometry check ───────────────────────────────────────────────────────────
+
+    const double dx               = target_.x - current_.x;
+    const double dy               = target_.y - current_.y;
+    const double distance         = std::sqrt(dx*dx + dy*dy);  // Euclidean distance
+    //const double angle_to_target  = std::atan2(dy, dx);
+    //const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
+    const double angle_difference = normalize_angle(target_.theta - current_.theta);
+
+        // Stop if goal already reached or battery flat
+    if (goal_reached_ || battery_consumption_ >= battery_level_)
+    {
+        tbot3_nav_monitor::msg::NavigationMetrics final_msg;
+
+        final_msg.distance_traveled           = distance_traveled_;
+        final_msg.battery_consumption         = battery_consumption_;
+        final_msg.min_obstacle_distance       = min_distance_obstacle_;
+        final_msg.recovery_count              = recovery_count_;
+        final_msg.goal_reached                = goal_reached_;
+        final_msg.current_x                   = current_.x;
+        final_msg.current_y                   = current_.y;
+        final_msg.current_theta               = current_.theta;
+        final_msg.distance_to_goal            = distance;
+        final_msg.distance_tolerance          = distance_tolerance_;
+        final_msg.angle_tolerance             = angle_tolerance_;
+        final_msg.obstacle_distance_tolerance = obstacle_distance_tolerance_;
+        final_msg.optimal_path                = optimal_path_;
+        final_msg.header.stamp                = this->get_clock()->now();
+        final_msg.header.frame_id             = "odom";
+        final_msg.nav2_state                  = nav2_state_;
+
+        if (metrics_pub_->is_activated())
+        {
+            metrics_pub_->publish(final_msg);
+        }
+        
+        return;
+    }
 
     // ── Collision check ──────────────────────────────────────────────────────
     if (collision_detection())
@@ -406,18 +455,13 @@ void MetricCollector::control_loop()
     target_.y,
     target_.theta);
 
-    // ── Goal check - Geometry check ───────────────────────────────────────────────────────────
-    const double dx               = target_.x - current_.x;
-    const double dy               = target_.y - current_.y;
-    const double distance         = std::sqrt(dx*dx + dy*dy);  // Euclidean distance
-    //const double angle_to_target  = std::atan2(dy, dx);
-    //const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
-    const double angle_difference = normalize_angle(target_.theta - current_.theta);
     
     // DEBUG Check
     RCLCPP_DEBUG(get_logger(),
     "CHECK: dist=%.3f tol=%.3f angle_diff=%.3f angle_tol=%.3f",
     distance, distance_tolerance_, angle_difference, angle_tolerance_);
+
+    // ── Goal check - Geometry check ───────────────────────────────────────────────────────────
 
     // Geometry check - fallback check - if AdaptiveController is down do a geometry check
     if (!goal_reached_ && distance <= distance_tolerance_ &&
@@ -428,10 +472,11 @@ void MetricCollector::control_loop()
             "GOAL REACHED (geometry fallback) | pos=(%.3f, %.3f, %.3f)",
             current_.x, current_.y, current_.theta);
     }
-    
+
     // ── Build NavigationMetrics message and publish ──────────────────────────
     tbot3_nav_monitor::msg::NavigationMetrics metrics_msg;
 
+    // Always publish when pub is active
     metrics_msg.distance_traveled           = distance_traveled_;
     metrics_msg.battery_consumption         = battery_consumption_;
     metrics_msg.min_obstacle_distance       = min_distance_obstacle_;
@@ -447,12 +492,12 @@ void MetricCollector::control_loop()
     metrics_msg.optimal_path                = optimal_path_;
     metrics_msg.header.stamp                = this->get_clock()->now();
     metrics_msg.header.frame_id             = "odom";
-
+    metrics_msg.nav2_state                  = nav2_state_;
+    
     if (metrics_pub_->is_activated()) // If the node is active publish the custom msg
     {
         metrics_pub_->publish(metrics_msg);
     }
-    
     // ── Debug log ────────────────────────────────────────────────────────────
     RCLCPP_DEBUG(get_logger(),
         "Current Position: (%.2f, %.2f, %.2f) | Target: (%.2f, %.2f) | Distance: %.3f "

@@ -180,13 +180,18 @@ void DataLogger::odom_rate_callback(const std::shared_ptr<const nav_msgs::msg::O
     odom_msg_count_++;
     const auto time_now = this->get_clock()->now();
     const double elapsed = (time_now - last_odom_time_).seconds();
-
+    
     if (elapsed >= 1.0)
     {
-        odom_rate_           = odom_msg_count_ / elapsed;
+        odom_rate_           = odom_msg_count_ / 1; // fixed window (msg at 1 second)
         odom_msg_count_      = 0;
         last_odom_time_      = time_now;
-        odom_rate_initialized_ = true;
+        if (!odom_rate_initialized_)
+        {
+            // Skip first
+            odom_rate_initialized_ = true;
+            return;
+        }
     }
 
     // If not initialized return
