@@ -101,21 +101,19 @@ private:
     Pose2D target_;                         ///< Target pose
     Pose2D start_;                          ///< Initial robot pose (used to compute optimal_path_)
 
-
-    double distance_traveled_  = 0.0;       ///< Cumulative distance travelled [m]
-    double last_step_ = 0.0;                ///< Last step of the distance travelled [m]
-    double optimal_path_ = 0.0;             ///< Euclidean distance start → goal [m]
-    double battery_level_      = 100.0;     ///< Remaining battery [%]
-    double battery_consumption_ = 0.0;      ///< Consumed battery [%]
+    // ── Private params ────────────────────────────────────────────────────
+    double distance_traveled_  = 0.0;                                   ///< Cumulative distance travelled [m]
+    double last_step_ = 0.0;                                            ///< Last step of the distance travelled [m]
+    double optimal_path_ = 0.0;                                         ///< Euclidean distance start → goal [m]
+    double battery_level_      = 100.0;                                 ///< Remaining battery [%]
+    double battery_consumption_ = 0.0;                                  ///< Consumed battery [%]
+    int    recovery_count_ = 0;                                         ///< Number of recovery events
+    double prev_odom_x_ = 0.0;                                          ///< Previous odometry x [m]
+    double prev_odom_y_ = 0.0;                                          ///< Previous odometry y [m]
+    uint8_t nav2_state_ = 0;                                            ///< Nav2 state param
     double min_distance_obstacle_ = std::numeric_limits<double>::max(); ///< Min obstacle distance [m]
 
-    int  recovery_count_ = 0;               ///< Number of recovery events
-
-    double prev_odom_x_ = 0.0;             ///< Previous odometry x [m]
-    double prev_odom_y_ = 0.0;             ///< Previous odometry y [m]
-
     // ── Sensor / command cache ───────────────────────────────────────────────
-
     std::vector<float> sensor_ranges_;      ///< Raw laser ranges (float, as in LaserScan)
     float sensor_range_min_ = 0.0f;         ///< Laser minimum valid range [m]
     float sensor_range_max_ = 0.0f;         ///< Laser maximum valid range [m]
@@ -123,7 +121,6 @@ private:
     geometry_msgs::msg::Twist last_cmd_vel_; ///< Last received cmd_vel
 
     // ── Status flags ────────────────────────────────────────────────────────
-
     bool goal_reached_            = false; ///< Bool to check if goal is achieved 
     bool odom_received_           = false; ///< Bool to check if the odom data has been received 
     bool sensor_received_         = false; ///< Bool to check if the sensor data has been received 
