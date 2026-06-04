@@ -14,6 +14,8 @@
 #include <sensor_msgs/msg/laser_scan.hpp>
 
 #include "tbot3_nav_monitor/msg/navigation_metrics.hpp"
+#include "tbot3_nav_monitor/nav2_status.hpp"
+
 #include <std_srvs/srv/trigger.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 
@@ -95,6 +97,7 @@ private:
     double max_angular_vel_;                ///< Maximum angular velocity [rad/s]
     double linear_gain_;                    ///< Proportional gain – linear
     double angular_gain_;                   ///< Proportional gain – angular
+    double alpha_;                          ///< Alpha tuning parameter for exponential moving average
 
     // ── Navigation state ────────────────────────────────────────────────────
     Pose2D current_;                        ///< Current robot pose
@@ -110,9 +113,10 @@ private:
     int    recovery_count_ = 0;                                         ///< Number of recovery events
     double prev_odom_x_ = 0.0;                                          ///< Previous odometry x [m]
     double prev_odom_y_ = 0.0;                                          ///< Previous odometry y [m]
-    uint8_t nav2_state_ = 0;                                            ///< Nav2 state param
+    Nav2State nav2_state_{Nav2State::UNKNOWN};                          ///< Nav2 state param
     double min_distance_obstacle_ = std::numeric_limits<double>::max(); ///< Min obstacle distance [m]
-
+    double smooth_distance_ = 0.0;                                      ///< Smooth distance for exponential moving average - Used for debug/visualization
+    
     // ── Sensor / command cache ───────────────────────────────────────────────
     std::vector<float> sensor_ranges_;      ///< Raw laser ranges (float, as in LaserScan)
     float sensor_range_min_ = 0.0f;         ///< Laser minimum valid range [m]
@@ -137,6 +141,7 @@ private:
     rclcpp::TimerBase::SharedPtr timer_;
 
     rclcpp_lifecycle::LifecyclePublisher<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr metrics_pub_;
+    rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
 
     // ── Service ─────────────────────────────────────────────────────────────
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;

@@ -6,6 +6,8 @@
 #include <std_msgs/msg/u_int8.hpp>
 
 #include "tbot3_nav_monitor/msg/navigation_metrics.hpp"
+#include "tbot3_nav_monitor/nav2_status.hpp"
+
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
@@ -96,6 +98,7 @@ private:
             * - .load() to read, .store() to write
             * - allows concurrent threads to read/write without waiting for each other
     */
+/*
 
     enum Nav2State : uint8_t
     {
@@ -103,7 +106,7 @@ private:
         SUCCEEDED = 1,
         ABORTED = 2,
         CANCELED = 3
-    };
+    };*/
 
     std::atomic<Nav2State> nav2_state_{Nav2State::UNKNOWN}; // Default value
 

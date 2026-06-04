@@ -85,8 +85,8 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     // ── Default values from params.yaml ─────────────────────────────────────
     declare_parameter("normal_max_vel_x",             0.3);
     declare_parameter("normal_max_vel_theta",          1.0);
-    declare_parameter("normal_xy_goal_tolerance",      0.25);
-    declare_parameter("normal_yaw_goal_tolerance",     0.25);
+    declare_parameter("normal_xy_goal_tolerance",      0.35);
+    declare_parameter("normal_yaw_goal_tolerance",     0.35);
     declare_parameter("normal_inflation_radius",       0.5);
     declare_parameter("normal_gridbase_tolerance",     0.5);
     declare_parameter("normal_costmap_resolution",     0.05);
@@ -94,12 +94,12 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     declare_parameter("normal_costmap_height",         2);
 
     // ── Adaptive values ──────────────────────────────────────────────────────
-    declare_parameter("reduced_max_vel_x",             0.15);
-    declare_parameter("reduced_max_vel_theta",          0.5);
-    declare_parameter("increased_xy_goal_tolerance",   0.35);
-    declare_parameter("increased_yaw_goal_tolerance",  0.35);
+    declare_parameter("reduced_max_vel_x",             0.2);
+    declare_parameter("reduced_max_vel_theta",          0.8);
+    declare_parameter("increased_xy_goal_tolerance",   0.40);
+    declare_parameter("increased_yaw_goal_tolerance",  0.40);
     declare_parameter("increased_inflation_radius",    0.6);
-    declare_parameter("reduced_gridbase_tolerance",    0.25);
+    declare_parameter("reduced_gridbase_tolerance",    0.35);
     declare_parameter("increased_costmap_resolution",  0.08);
     declare_parameter("increased_costmap_width",       3);
     declare_parameter("increased_costmap_height",      3);
@@ -136,17 +136,6 @@ AdaptiveController::on_configure(const rclcpp_lifecycle::State & state)
     // Nav2 Action Client
     nav2_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(this, "navigate_to_pose");
 
-    // Wait for services with timeout
-    // (change WARN to FAILURE when Nav2 environment is ready)
-    auto warn_if_missing = [this](auto & client, const char * name) {
-        if (!client->wait_for_service(std::chrono::seconds(5)))
-            RCLCPP_WARN(get_logger(), "%s not available at configure time", name);
-    };
-    warn_if_missing(controller_client_, "controller_server");
-    warn_if_missing(costmap_client_,    "local_costmap");
-    warn_if_missing(planner_client_,    "planner_server");
-    warn_if_missing(reset_client_,      "metric_collector/reset");
-
     // ── Create subscriber ────────────────────────────────────────────────────
     metrics_sub_ = create_subscription<tbot3_nav_monitor::msg::NavigationMetrics>("/navigation_metrics", 10,
         std::bind(&AdaptiveController::metrics_callback, this, std::placeholders::_1));
@@ -158,6 +147,22 @@ AdaptiveController::on_configure(const rclcpp_lifecycle::State & state)
     
     // Create Publisher
     goal_status_pub_ = create_publisher<std_msgs::msg::UInt8>("/nav2_goal_status", 10);
+
+    // Wait for services with timeout
+    auto warn_if_missing = [this](auto & client, const char * name) {
+        if (!client->wait_for_service(std::chrono::seconds(5)))
+            RCLCPP_WARN(get_logger(), "%s not available at configure time", name);
+    };
+    warn_if_missing(controller_client_, "controller_server");
+    warn_if_missing(costmap_client_,    "local_costmap");
+    warn_if_missing(planner_client_,    "planner_server");
+    warn_if_missing(reset_client_,      "metric_collector/reset");
+
+    if(!nav2_client_->wait_for_action_server(std::chrono::seconds(10)))
+    {     
+        RCLCPP_ERROR(get_logger(), "Nav2 action server not available!");
+        return CallbackReturn::FAILURE;
+    }
 
     RCLCPP_INFO(get_logger(), "on_configure() called — node still INACTIVE");
     return CallbackReturn::SUCCESS;
@@ -224,11 +229,6 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
 //  ── Private helpers method ─────────────────────
 void AdaptiveController::send_nav2_goal(const geometry_msgs::msg::PoseStamped & goal)
 {
-    if(!nav2_client_->wait_for_action_server(std::chrono::seconds(5)))
-    {     
-        RCLCPP_ERROR(get_logger(), "Nav2 action server not available!");
-        return;
-    }
     
     // Activate the robot navigation
     navigation_active_.store(true);
@@ -476,7 +476,7 @@ void AdaptiveController::apply_params(const Nav2Params & param)
         param.costmap_width, param.costmap_height);
 
         costmap_client_->set_parameters({
-            rclcpp::Parameter("local_costmap.inflation_layer.inflation_radius", param.inflation_radius),
+            rclcpp::Parameter("inflation_layer.inflation_radius", param.inflation_radius),
             rclcpp::Parameter("resolution",                       param.costmap_resolution),
             rclcpp::Parameter("width",                            param.costmap_width),
             rclcpp::Parameter("height",                           param.costmap_height)

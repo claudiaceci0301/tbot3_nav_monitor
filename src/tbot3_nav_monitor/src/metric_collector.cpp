@@ -30,6 +30,7 @@ MetricCollector::MetricCollector(const std::string & node_name, const rclcpp::No
     declare_parameter("max_angular_vel",               1.0); 
     declare_parameter("linear_gain",                   0.5);
     declare_parameter("angular_gain",                  2.0); 
+    declare_parameter("alpha",                         0.3);
     
     // ── Get parameter values ────────────────────────────────────────────────
     publish_rate_                 = get_parameter("publish_rate").as_double();
@@ -44,6 +45,7 @@ MetricCollector::MetricCollector(const std::string & node_name, const rclcpp::No
     max_angular_vel_              = get_parameter("max_angular_vel").as_double();
     linear_gain_                  = get_parameter("linear_gain").as_double();
     angular_gain_                 = get_parameter("angular_gain").as_double();
+    alpha_                        = get_parameter("alpha").as_double();
 
     RCLCPP_INFO(get_logger(), "Metric Collector node %s  has been created! ", node_name.c_str());
 
@@ -61,7 +63,8 @@ MetricCollector::on_configure(const rclcpp_lifecycle::State & state)
     rclcpp_lifecycle::LifecycleNode::on_configure(state);
 
     // Create lifecycle publisher  (inactive until on_activate)
-    metrics_pub_ = create_publisher<tbot3_nav_monitor::msg::NavigationMetrics>("/navigation_metrics", 10);        
+    metrics_pub_ = create_publisher<tbot3_nav_monitor::msg::NavigationMetrics>("/navigation_metrics", 10);     
+    cmd_vel_pub_ = create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_filtered", 10);   
         
      // Create subscribers
     odom_sub_       = create_subscription<nav_msgs::msg::Odometry>("/odom", 10,
@@ -75,8 +78,8 @@ MetricCollector::on_configure(const rclcpp_lifecycle::State & state)
     goal_status_sub_ = create_subscription<std_msgs::msg::UInt8>("/nav2_goal_status", 10,
                             [this](const std::shared_ptr<const std_msgs::msg::UInt8> msg){
                                 std::lock_guard<std::mutex> lock(state_mutex_);
-                                nav2_state_ = msg->data;
-                                if(nav2_state_ == 1) // Received nav2stat SUCCEEDED
+                                nav2_state_ = static_cast<Nav2State>(msg->data);
+                                if(nav2_state_ == Nav2State::SUCCEEDED) // Received nav2stat SUCCEEDED
                                 {
                                     goal_reached_ = true;
                                 }
@@ -101,6 +104,7 @@ MetricCollector::on_activate(const rclcpp_lifecycle::State & state)
 
     // Activate lifecycle publisher (explicit call)
     metrics_pub_->on_activate();
+    cmd_vel_pub_->on_activate();
 
     // Start periodic control / publish timer
     const auto publish_in_ms = static_cast<int>(1000.0 / publish_rate_);
@@ -119,6 +123,7 @@ MetricCollector::on_deactivate(const rclcpp_lifecycle::State & state)
 
     // Stop the timer 
     metrics_pub_->on_deactivate(); // Stop publishing
+    cmd_vel_pub_->on_deactivate();
     timer_->cancel(); // Stop the timer
     RCLCPP_INFO(get_logger(), "on_deactivate() called, Node is again INACTIVE");
     return CallbackReturn::SUCCESS;
@@ -140,6 +145,7 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     goal_status_sub_.reset();
     tf2_listener_.reset();
     tf2_buffer_.reset();
+    cmd_vel_pub_.reset();
 
     // Reset state
     distance_traveled_    = 0.0;
@@ -147,11 +153,12 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     battery_level_        = 100.0;
     recovery_count_       = 0;
     last_step_            = 0;
+    smooth_distance_      = 0.0;
     goal_reached_         = false;
     odom_received_        = false;
     sensor_received_      = false;
     cmd_vel_received_     = false;
-    nav2_state_            = 0;
+    nav2_state_           = Nav2State::UNKNOWN;
     min_distance_obstacle_ = std::numeric_limits<double>::max();
 
     RCLCPP_INFO(get_logger(), "on_cleanup() is called, everything has been resetted the node is UNCONFIGURED");
@@ -224,6 +231,10 @@ void MetricCollector::cmdvel_callback(const std::shared_ptr<const geometry_msgs:
 
     last_cmd_vel_     = *msg; // Deference of the twist shared_ptr
     cmd_vel_received_ = true;
+
+    // DeadBand cmd_vel 
+    //if(std::abs(last_cmd_vel_.linear.x)  < 0.02)  last_cmd_vel_.linear.x = 0.0;
+    //if(std::abs(last_cmd_vel_.angular.z) < 0.02)  last_cmd_vel_.angular.z = 0.0;
 }
 
  void MetricCollector::goal_send_callback(const std::shared_ptr<const geometry_msgs::msg::PoseStamped> & msg)
@@ -390,14 +401,32 @@ void MetricCollector::control_loop()
 
     const double dx               = target_.x - current_.x;
     const double dy               = target_.y - current_.y;
-    const double distance         = std::sqrt(dx*dx + dy*dy);  // Euclidean distance
-    //const double angle_to_target  = std::atan2(dy, dx);
-    //const double angle_difference = normalize_angle(angle_to_target - current_.theta); 
     const double angle_difference = normalize_angle(target_.theta - current_.theta);
+    const double distance_to_goal = std::sqrt(dx*dx + dy*dy);  // Euclidean distance (raw value - logic value   )
+    const bool physically_at_goal = (distance_to_goal <= distance_tolerance_) &&
+                                  (std::abs(angle_difference) <= angle_tolerance_);
 
-        // Stop if goal already reached or battery flat
-    if (goal_reached_ || battery_consumption_ >= battery_level_)
+    // Exponential moving average : y[n]=y[n−1]⋅(1−α)+x[n]⋅α
+    // alpha > reactive filter but more noise more jitter
+    // alph < slower filter, smooth, more stable
+    smooth_distance_ = alpha_ * distance_to_goal + (1.0 - alpha_) * smooth_distance_;
+    
+    // DEBUG cmd_vel
+    RCLCPP_DEBUG(get_logger(),
+        "cmd_vel linear=%.3f angular=%.3f",
+        last_cmd_vel_.linear.x,
+        last_cmd_vel_.angular.z);
+
+    // If the goal received from Nav2 is succeded or if it is physically at the goal
+    //  or if the battery is > level stop and publish the last msg
+
+    if (goal_reached_ || physically_at_goal || battery_consumption_ >= battery_level_)
     {
+        // Stop the robot sending 0 velocity
+        geometry_msgs::msg::Twist move_cmd;
+        move_cmd.linear.x = 0.0;
+        move_cmd.angular.z = 0.0;
+
         tbot3_nav_monitor::msg::NavigationMetrics final_msg;
 
         final_msg.distance_traveled           = distance_traveled_;
@@ -408,14 +437,19 @@ void MetricCollector::control_loop()
         final_msg.current_x                   = current_.x;
         final_msg.current_y                   = current_.y;
         final_msg.current_theta               = current_.theta;
-        final_msg.distance_to_goal            = distance;
+        final_msg.distance_to_goal            = distance_to_goal;
         final_msg.distance_tolerance          = distance_tolerance_;
         final_msg.angle_tolerance             = angle_tolerance_;
         final_msg.obstacle_distance_tolerance = obstacle_distance_tolerance_;
         final_msg.optimal_path                = optimal_path_;
         final_msg.header.stamp                = this->get_clock()->now();
         final_msg.header.frame_id             = "odom";
-        final_msg.nav2_state                  = nav2_state_;
+        final_msg.nav2_state                  = static_cast<uint8_t>(nav2_state_);
+        
+        if(cmd_vel_pub_->is_activated())
+        {
+            cmd_vel_pub_->publish(move_cmd);
+        }
 
         if (metrics_pub_->is_activated())
         {
@@ -459,13 +493,12 @@ void MetricCollector::control_loop()
     // DEBUG Check
     RCLCPP_DEBUG(get_logger(),
     "CHECK: dist=%.3f tol=%.3f angle_diff=%.3f angle_tol=%.3f",
-    distance, distance_tolerance_, angle_difference, angle_tolerance_);
+    distance_to_goal, distance_tolerance_, angle_difference, angle_tolerance_);
 
     // ── Goal check - Geometry check ───────────────────────────────────────────────────────────
 
     // Geometry check - fallback check - if AdaptiveController is down do a geometry check
-    if (!goal_reached_ && distance <= distance_tolerance_ &&
-        std::abs(angle_difference) <= angle_tolerance_)
+    if (!goal_reached_ && physically_at_goal)
     {
         goal_reached_ = true;
         RCLCPP_INFO(get_logger(),
@@ -485,14 +518,14 @@ void MetricCollector::control_loop()
     metrics_msg.current_x                   = current_.x;
     metrics_msg.current_y                   = current_.y;
     metrics_msg.current_theta               = current_.theta;
-    metrics_msg.distance_to_goal            = distance;
+    metrics_msg.distance_to_goal            = distance_to_goal;
     metrics_msg.distance_tolerance          = distance_tolerance_;
     metrics_msg.angle_tolerance             = angle_tolerance_;
     metrics_msg.obstacle_distance_tolerance = obstacle_distance_tolerance_;
     metrics_msg.optimal_path                = optimal_path_;
     metrics_msg.header.stamp                = this->get_clock()->now();
     metrics_msg.header.frame_id             = "odom";
-    metrics_msg.nav2_state                  = nav2_state_;
+    metrics_msg.nav2_state                  = static_cast<uint8_t>(nav2_state_);
     
     if (metrics_pub_->is_activated()) // If the node is active publish the custom msg
     {
@@ -504,7 +537,7 @@ void MetricCollector::control_loop()
         "| AngleDiff: %.3f | Battery consumed: %.2f%% | Recoveries: %d",
         current_.x, current_.y, current_.theta,
         target_.x,  target_.y,
-        distance, angle_difference,
+        distance_to_goal, angle_difference,
         battery_consumption_, recovery_count_);
 }
 
