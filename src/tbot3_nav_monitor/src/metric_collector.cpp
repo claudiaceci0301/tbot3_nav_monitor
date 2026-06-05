@@ -319,7 +319,6 @@ void MetricCollector::reset_callback(const std::shared_ptr<std_srvs::srv::Trigge
     cmd_vel_received_     = false;
     min_distance_obstacle_ = std::numeric_limits<double>::max();
     nav2_state_           = Nav2State::UNKNOWN;
-    optimal_path_         = 0.0;
 
     response->success = true;
     response->message = "MetricCollector reset for next goal";
@@ -423,12 +422,6 @@ void MetricCollector::control_loop()
 
     // If the goal received from Nav2 is succeded or if it is physically at the goal
     //  or if the battery is > level stop and publish the last msg
-
-    // DEBUG
-    RCLCPP_INFO(get_logger(),
-    "goal_reached=%d physically_at_goal=%d",
-    goal_reached_,
-    physically_at_goal);
 
     if (goal_reached_ || physically_at_goal || battery_consumption_ >= battery_level_)
     {
