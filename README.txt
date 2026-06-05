@@ -293,7 +293,7 @@ Additional parameters are loaded from the file foxglove_bridge_params.yaml.
 
 ```
 
-### Kill stale processes (if needed)
+## Kill stale processes (if needed)
 
 ```bash
 pkill -f gz
@@ -384,6 +384,12 @@ Remaining challenges:
 
 ---
 
+## Performance Notes
+
+This simulation stack (Gazebo + Cartographer + Nav2 + tbot3_nav_monitor) is resource-intensive. 
+On my machines wich has 8GB RAM only, the control loop frequency warnings are expected but still these do not affect the overall navigation.
+
+--- 
 ## Demo
 
 *[Insert 5-minute demo video link here]*
