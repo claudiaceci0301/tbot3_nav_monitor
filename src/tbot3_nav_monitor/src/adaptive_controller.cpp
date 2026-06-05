@@ -21,25 +21,25 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
 
     // ── Default values from params.yaml ─────────────────────────────────────
     declare_parameter("normal_max_vel_x",             0.3);
-    declare_parameter("normal_max_vel_theta",          1.0);
+    declare_parameter("normal_max_vel_theta",          0.6);
     declare_parameter("normal_xy_goal_tolerance",      0.35);
     declare_parameter("normal_yaw_goal_tolerance",     0.35);
-    declare_parameter("normal_inflation_radius",       0.5);
+    declare_parameter("normal_inflation_radius",       0.3);
     declare_parameter("normal_gridbase_tolerance",     0.5);
     declare_parameter("normal_costmap_resolution",     0.05);
-    declare_parameter("normal_costmap_width",          2);
-    declare_parameter("normal_costmap_height",         2);
+    declare_parameter("normal_costmap_width",          3);
+    declare_parameter("normal_costmap_height",         3);
 
     // ── Adaptive values ──────────────────────────────────────────────────────
     declare_parameter("reduced_max_vel_x",             0.2);
-    declare_parameter("reduced_max_vel_theta",          0.8);
+    declare_parameter("reduced_max_vel_theta",          0.5);
     declare_parameter("increased_xy_goal_tolerance",   0.40);
     declare_parameter("increased_yaw_goal_tolerance",  0.40);
-    declare_parameter("increased_inflation_radius",    0.6);
+    declare_parameter("increased_inflation_radius",    0.4);
     declare_parameter("reduced_gridbase_tolerance",    0.35);
     declare_parameter("increased_costmap_resolution",  0.08);
-    declare_parameter("increased_costmap_width",       3);
-    declare_parameter("increased_costmap_height",      3);
+    declare_parameter("increased_costmap_width",       4);
+    declare_parameter("increased_costmap_height",      4);
 
     // ── Cache threshold values ───────────────────────────────────────────────
     recovery_threshold_   = get_parameter("recovery_threshold").as_int();
