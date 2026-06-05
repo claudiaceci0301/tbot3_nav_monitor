@@ -9,7 +9,6 @@ services:
     image: ros2_humble_dev
     container_name: ros2_humble_new
 
-    # Port mapping per Foxglove
     ports:
       - "8765:8765"
 
