@@ -141,7 +141,6 @@ private:
     rclcpp::TimerBase::SharedPtr timer_;
 
     rclcpp_lifecycle::LifecyclePublisher<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr metrics_pub_;
-    rclcpp_lifecycle::LifecyclePublisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
 
     // ── Service ─────────────────────────────────────────────────────────────
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reset_srv_;

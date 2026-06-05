@@ -64,7 +64,6 @@ MetricCollector::on_configure(const rclcpp_lifecycle::State & state)
 
     // Create lifecycle publisher  (inactive until on_activate)
     metrics_pub_ = create_publisher<tbot3_nav_monitor::msg::NavigationMetrics>("/navigation_metrics", 10);     
-    cmd_vel_pub_ = create_publisher<geometry_msgs::msg::Twist>("/cmd_vel_filtered", 10);   
         
      // Create subscribers
     odom_sub_       = create_subscription<nav_msgs::msg::Odometry>("/odom", 10,
@@ -104,7 +103,6 @@ MetricCollector::on_activate(const rclcpp_lifecycle::State & state)
 
     // Activate lifecycle publisher (explicit call)
     metrics_pub_->on_activate();
-    cmd_vel_pub_->on_activate();
 
     // Start periodic control / publish timer
     const auto publish_in_ms = static_cast<int>(1000.0 / publish_rate_);
@@ -123,7 +121,6 @@ MetricCollector::on_deactivate(const rclcpp_lifecycle::State & state)
 
     // Stop the timer 
     metrics_pub_->on_deactivate(); // Stop publishing
-    cmd_vel_pub_->on_deactivate();
     timer_->cancel(); // Stop the timer
     RCLCPP_INFO(get_logger(), "on_deactivate() called, Node is again INACTIVE");
     return CallbackReturn::SUCCESS;
@@ -145,7 +142,6 @@ MetricCollector::on_cleanup(const rclcpp_lifecycle::State & state)
     goal_status_sub_.reset();
     tf2_listener_.reset();
     tf2_buffer_.reset();
-    cmd_vel_pub_.reset();
 
     // Reset state
     distance_traveled_    = 0.0;
@@ -422,11 +418,6 @@ void MetricCollector::control_loop()
 
     if (goal_reached_ || physically_at_goal || battery_consumption_ >= battery_level_)
     {
-        // Stop the robot sending 0 velocity
-        geometry_msgs::msg::Twist move_cmd;
-        move_cmd.linear.x = 0.0;
-        move_cmd.angular.z = 0.0;
-
         tbot3_nav_monitor::msg::NavigationMetrics final_msg;
 
         final_msg.distance_traveled           = distance_traveled_;
@@ -446,11 +437,6 @@ void MetricCollector::control_loop()
         final_msg.header.frame_id             = "odom";
         final_msg.nav2_state                  = static_cast<uint8_t>(nav2_state_);
         
-        if(cmd_vel_pub_->is_activated())
-        {
-            cmd_vel_pub_->publish(move_cmd);
-        }
-
         if (metrics_pub_->is_activated())
         {
             metrics_pub_->publish(final_msg);
