@@ -219,7 +219,7 @@ void AdaptiveController::goal_response_callback(const rclcpp_action::ClientGoalH
     }
     else
     {
-        RCLCPP_INFO(this->get_logger(), "Goal accepted by server, waiting for result!");
+        RCLCPP_INFO(get_logger(), "Goal accepted by server, waiting for result!");
     }
 }
 
@@ -312,8 +312,6 @@ AdaptiveController::Nav2Params AdaptiveController::compute_desired_params() cons
     // So if the window is not complete use the default params
     if (!window_ready_) 
         return nav2_params; 
-
-    // ── ADAPTIVE LOGICE HERE  ────────────────────────────────────────────────
     
     // ── Condition 2: poor goal accuracy ──────────────────────────────────────
     // Robot consistently stops far from goal → relax goal checker tolerances
@@ -365,7 +363,6 @@ AdaptiveController::Nav2Params AdaptiveController::compute_desired_params() cons
 
     return nav2_params;
 }
-
 
 // Translates a Nav2Params into three async set_parameters calls, one per Nav2 server, once per decision cycle
 // In apply_params: Diff and Rate limit check
