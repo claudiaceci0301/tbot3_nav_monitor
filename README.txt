@@ -16,6 +16,25 @@ full compatibility with the official TurtleBot3 simulation stack.
 
 ---
 
+---
+### Base Docker Strategy
+
+The original assignment suggests starting from the provided TurtleBot3 simulation Docker environment (merabro/turtlebot3-sim).
+However, this image is based on ROS1 Noetic, while the required system architecture is built on ROS2 Humble (Nav2 + Foxglove + rclcpp).
+
+To ensure full compatibility with ROS2 components and avoid cross-version integration issues, the project adopts the following strategy:
+
+- The simulation assets is characterized by TurtleBot3 models, Nav2, Gazebo setup (without gui) and Foxglove setup. 
+- The runtime system is based on a ROS2 Humble Docker image (ros2_humble_backup)
+- All required TurtleBot3 functionalities are re-integrated into the ROS2 ecosystem
+
+This approach ensures:
+
+- Full ROS2-native navigation stack compatibility (Nav2)
+- Stable Foxglove Bridge integration
+- Cross-platform Docker execution (Docker-Desktop Windows)
+---
+
 ## Base System
 
 | Component | Version / Image |
@@ -60,6 +79,39 @@ full compatibility with the official TurtleBot3 simulation stack.
 
 ## Node Details
 
+### Node Execution 
+
+All nodes in the system are launched within a single process and executed using a MultiThreadedExecutor:
+  -`rclcpp::executors::MultiThreadedExecutor executor`
+
+This design choice allows the system to:
+
+- Run MetricCollector, AdaptiveController, and DataLogger concurrently;
+- Avoid blocking behavior between data collection, analysis, and logging;
+- Improve responsiveness,
+
+All nodes are instantiated and managed through a unified execution entry point, 
+ensuring consistent lifecycle and parameter handling.
+
+### Simulation Time Synchronization
+
+All nodes in the system are configured to use simulation time (`use_sim_time = true`).
+
+This is set programmatically via `rclcpp::NodeOptions` in `main.cpp`.
+This ensures that all nodes share a consistent time source provided by Gazebo, rather than relying on system wall-clock time.
+
+Using simulation time guarantees:
+
+- Time consistency across all nodes
+- All components (metrics collection, adaptive control, logging) operate on the same timeline.
+- Correct behavior in simulation environments
+- ROS2 nodes stay synchronized with Gazebo physics time.
+- All the performance metrics such as navigation duration, recovery timing, path execution time, 
+  are computed using simulation-consistent timestamps.
+
+Without use_sim_time, nodes may produce inconsistent or invalid temporal measurements due to
+the desynchronization between real and simulated time.
+
 ### `adaptive_controller_node` (LifecycleNode)
 
 Subscribes to `/navigation_metrics` and dynamically adjusts Nav2 parameters via `AsyncParametersClient`.
@@ -87,7 +139,7 @@ and diff check to avoid unnecessary parameter updates:
 1. `/goal_pose` received → `send_nav2_goal()` → Nav2 action server
 2. `MetricCollector` reset requested via `/metric_collector/reset`
 3. `result_callback` publishes `/nav2_goal_status`
-4. On goal reached: all parameters restored to normal, window reset and cmd_vel set to 0 trough the topic '/cmd_vel_filtered'
+4. On goal reached: all parameters restored to normal and window reset 
 
 ### `metric_collector_node` (LifecycleNode)
 
@@ -103,6 +155,9 @@ Timer-driven at `publish_rate` Hz. Collects and publishes `NavigationMetrics` me
 | `recovery_count` | Nav2 recovery events detected |
 | `goal_reached` | True when Nav2 SUCCEEDED or geometry fallback triggered |
 | `distance_to_goal` | Euclidean distance to current target [m] |
+| `distance_tolerance` | Linear Distance tolerance allowed [m] |
+| `angle_tolerance` | Angular Distance tolerance allowed [rad] |
+| `obstacle_distance_tolerance` | Obstacle Distance tolerance allowed [m] |
 | `optimal_path` | Straight-line start→goal distance [m] |
 | `nav2_state` | Last Nav2 result code (0=UNKNOWN, 1=SUCCEEDED, 2=ABORTED, 3=CANCELED) |
 
@@ -111,11 +166,10 @@ Timer-driven at `publish_rate` Hz. Collects and publishes `NavigationMetrics` me
 - `cmd_vel` was non-zero but odometry position is unchanged (robot stuck)
 
 **Geometry fallback** — if `AdaptiveController` is down, `goal_reached_` is set when 
-the robot enters the geometric tolerance independently of Nav2.
+  the robot enters the geometric tolerance independently of Nav2.
 
 **Goal reached guard** — once `goal_reached_` is true, the control loop publishes 
-a final complete message, the final cmd velocity set to 0
-and stops updating counters (no spurious recovery increments after goal).
+  a final complete message and stops updating counters (no spurious recovery increments after goal).
 
 ### `data_logger_node` (rclcpp::Node)
 
@@ -164,7 +218,8 @@ uint8   nav2_state
 
 ## Nav2 Configuration
 
-All Nav2 parameters are consolidated in `config/params.yaml`, which fully replaces the Nav2 default configuration. 
+All Nav2 parameters are consolidated in `config/params.yaml`, which replaces the Nav2 default configuration. 
+Some parameters have been modified from the default Nav2 values to improve simulation stability.
 Key tuned values:
 
 | Parameter | Value | Reason |
@@ -172,9 +227,25 @@ Key tuned values:
 | `controller_frequency` | 15 Hz | Reduced from 20 Hz to lower CPU load in simulation |
 | `xy_goal_tolerance` | 0.35 m | Larger tolerance for stable goal reaching in simulation |
 | `yaw_goal_tolerance` | 0.35 m | Idem |
-| `inflation_radius` | 0.5 m | Safe clearance from obstacles |
+| `inflation_radius` | 0.3 m | Safe clearance from obstacles |
 | `movement_time_allowance` | 20 s | Allows time for recovery behaviors |
 | `required_movement_radius` | 0.2 m | Progress checker sensitivity |
+| `BaseObstacle.scale` | 0.01 | Reduced obstacle influence to prioritize path following |
+| `PathAlign.scale` | 16.0 | Strong path alignment behavior |
+| `PathAlign.forward_point_distance` | 0.1 | Short lookahead for tighter path tracking |
+| `GoalAlign.scale` | 16.0 | Strong goal alignment behavior |
+| `GoalAlign.forward_point_distance` | 0.1 | Improves final goal approach accuracy |
+| `PathDist.scale` | 16.0 | High priority to staying close to global path |
+| `GoalDist.scale` | 16.0 | Strong attraction toward goal position |
+| `RotateToGoal.scale` | 16.0 | Ensures correct final orientation alignment |
+| `RotateToGoal.slowing_factor` | 10.0 | Smooth deceleration near goal |
+| `RotateToGoal.lookahead_time` | -1.0 | Disables lookahead for rotation behavior |
+| `min_vel_x` | 0.0 | Allows full stop / flexible low-speed behavior |
+| `min_vel_y` | 0.0 | No lateral motion constraint |
+| `min_vel_theta` | 0.0 | Allows zero angular velocity when needed |
+
+Several additional parameters were also tuned in the YAML configuration file to further improve 
+navigation stability and performance in simulation environments.
 
 The adaptive controller modifies these parameters at runtime.
 On goal reached, all parameters are restored to the values defined in `params.yaml` (aka. 'normal_[namevariable]').
