@@ -16,12 +16,7 @@ namespace tbot3_nav_monitor
 
 /**
     * @brief rclcpp Node that collects data and save them into csv files with timestamp
-    *       - CSV logging of performance data with timestamps (time,planner_ok,controller_ok,tf_delay_ms,odom_rate,latency_ms)
-    *       - RViz2 plugin or custom panel displaying performance metrics and system status
-    *       - Alternative: Foxglove Studio dashboard for real-time monitoring
-    *       - Alert system for performance degradation (console warnings or visual indicators)
-    *       - Bonus: Custom web-based dashboard accessible outside the containerg
-    *
+    *       - CSV logging of performance data with timestamps
 */
 
 class DataLogger : public rclcpp::Node
