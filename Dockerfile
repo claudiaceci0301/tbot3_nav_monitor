@@ -15,15 +15,6 @@ ARG WORKSPACE=/workspace
 ENV ROS_DISTRO=humble \
     WORKSPACE=${WORKSPACE}     
 
-# ── Automatic Source ─────────────────────────────────────────────────────────────
-RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
-RUN echo "export TURTLEBOT3_MODEL=burger" >> ~/.bashrc
-RUN echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc
-# Foxglove + ROS2: Foxglove Bridge connects to the ROS2 topics and ROS2 uses DDS to publish them 
-# so they must have the same domain of DDS 
-# Source WS if built
-RUN echo "if [ -f /root/tbot3_nav_monitor/install/setup.bash ]; then source /root/tbot3_nav_monitor/install/setup.bash; fi" >> ~/.bashrc
-
 # ── Entrypoint for the source file ───────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
