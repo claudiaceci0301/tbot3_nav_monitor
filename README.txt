@@ -276,17 +276,17 @@ docker exec -it ros2_humble_new bash
 1. When docker-compose.yaml is started, the Foxglove Bridge is launched using the following command sequence. 
 These commands configure the bridge by setting the listening port and loading the parameter configuration file:
 
-command:
-  - bash
-  - -c
-  - >
-      source /opt/ros/humble/setup.bash &&
-      source /workspace/install/setup.bash &&
-      ros2 run foxglove_bridge foxglove_bridge
-      --ros-args
-      -p port:=8765
-      -p address:=0.0.0.0
-      --params-file /workspace/config/foxglove_bridge_params.yaml
+    command:
+      - bash
+      - -c
+      - >
+        source /opt/ros/humble/setup.bash &&
+        source /workspace/install/setup.bash &&
+        ros2 run foxglove_bridge foxglove_bridge
+        --ros-args
+        -p port:=8765
+        -p address:=0.0.0.0
+        --params-file /workspace/config/foxglove_bridge_params.yaml
 
 The bridge is configured to listen on port 8765 and accept connections from any network interface (0.0.0.0).
 Additional parameters are loaded from the file foxglove_bridge_params.yaml.
