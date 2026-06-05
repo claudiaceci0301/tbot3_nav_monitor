@@ -4,69 +4,6 @@
 #include <chrono>
 #include <cmath>
 
-/*
-C — I nodi Nav2 in dettaglio
-1 — planner_server
-Calcola il path globale dal punto corrente al goal — il percorso completo sulla mappa. 
-I parametri che ti interessano:
-GridBased.tolerance          → distanza accettabile dal goal nel path planning
-GridBased.use_astar          → usa A* invece di Dijkstra (tipo di algoritmo)
-Quando dici "switch to more conservative path planning" puoi aumentare tolerance o cambiare il plugin di planning con uno più cauto.
-
-2 — controller_server
-Prende il path globale dal planner e genera i comandi di velocità (/cmd_vel) per seguirlo in tempo reale.
-È il nodo che muove fisicamente il robot. Il plugin default si chiama FollowPath (DWB controller). 
-I parametri chiave:
-FollowPath.max_vel_x         → velocità lineare massima [m/s]
-FollowPath.max_vel_theta     → velocità angolare massima [rad/s]
-FollowPath.min_vel_x         → velocità minima (evita movimenti troppo lenti)
-FollowPath.acc_lim_x         → accelerazione massima lineare
-FollowPath.acc_lim_theta     → accelerazione massima angolare
-Quando hai troppi recovery → riduci max_vel_x perché il robot va troppo veloce per reagire agli ostacoli.
-
-3 — local_costmap
-È una mappa locale centrata sul robot (es. 3x3 metri) che si aggiorna in tempo reale con i dati del laser. 
-Rappresenta dove ci sono ostacoli nell'immediato intorno. 
-I parametri chiave:
-local_costmap.inflation_layer.inflation_radius   → raggio di "gonfiamento" degli ostacoli [m]
-local_costmap.obstacle_layer.obstacle_range      → distanza massima a cui registra ostacoli
-local_costmap.width                              → larghezza della mappa locale [m]
-local_costmap.height                             → altezza della mappa locale [m]
-local_costmap.resolution                         → risoluzione in metri per cella
-inflation_radius è il più importante per te — aumentandolo il robot mantiene più distanza dagli ostacoli, rendendo la navigazione più conservativa ma più sicura.
-Quando l'obstacle avoidance è inefficiente → aumenti questo valore.
-
-4 — global_costmap
-Simile alla local ma rappresenta tutta la mappa dell'ambiente. Viene aggiornata più lentamente.
-Il planner la usa per calcolare il path globale. Per ora non ti serve modificarla a runtime.
-
-5 — behavior_server
-Gestisce i recovery behavior — cosa fa il robot quando è bloccato. 
-I behavior default sono:
-spin → ruota su se stesso per trovare una via libera
-backup → fa retromarcia
-wait → aspetta che l'ostacolo si sposti
-
-Questo nodo è quello che incrementa il tuo recovery_count_ nel MetricCollector.
-
-Schema riassuntivo
-/scan ──────────────────────────────────────────→ local_costmap
-                                                        ↓
-/goal_pose ──→ planner_server (path globale) ──→ controller_server ──→ /cmd_vel ──→ robot
-                                                        ↑
-                                               behavior_server (recovery)
-                                               
-AdaptiveBehavior ──→ parameter service ──→ controller_server (velocità)
-                                       ──→ local_costmap (inflation)
-                                       ──→ planner_server (tolleranza
-
-quindi alla fine avrò:
-recovery alto        → controller_server  → riduci max_vel_x
-accuracy bassa       → planner_server     → aumenta tolerance
-avoidance inefficiente → local_costmap    → aumenta inflation_radius
-*/
-
-
 namespace tbot3_nav_monitor
 {
 
