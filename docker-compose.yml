@@ -25,8 +25,19 @@ services:
       - bash
       - -c
       - >
-        source /opt/ros/humble/setup.bash &&
-        source /workspace/install/setup.bash &&
+        set -e;
+
+        source /opt/ros/humble/setup.bash;
+
+        cd /workspace;
+
+        if [ ! -d install ]; then
+          echo ">>> install missing -> building workspace";
+          colcon build;
+        fi;
+
+        source install/setup.bash;
+
         ros2 run foxglove_bridge foxglove_bridge
         --ros-args
         -p port:=8765
