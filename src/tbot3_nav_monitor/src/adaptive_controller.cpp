@@ -20,7 +20,7 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     declare_parameter("window_size",          10);   // evaluate every 10 messages
 
     // ── Default values from params.yaml ─────────────────────────────────────
-    declare_parameter("normal_max_vel_x",             0.3);
+    declare_parameter("normal_max_vel_x",              0.3);
     declare_parameter("normal_max_vel_theta",          0.6);
     declare_parameter("normal_xy_goal_tolerance",      0.35);
     declare_parameter("normal_yaw_goal_tolerance",     0.35);
@@ -32,7 +32,7 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
 
     // ── Adaptive values ──────────────────────────────────────────────────────
     declare_parameter("reduced_max_vel_x",             0.2);
-    declare_parameter("reduced_max_vel_theta",          0.5);
+    declare_parameter("reduced_max_vel_theta",         0.5);
     declare_parameter("increased_xy_goal_tolerance",   0.40);
     declare_parameter("increased_yaw_goal_tolerance",  0.40);
     declare_parameter("increased_inflation_radius",    0.6);
@@ -166,7 +166,7 @@ AdaptiveController::on_cleanup(const rclcpp_lifecycle::State & state)
 //  ── Private helpers method ─────────────────────
 void AdaptiveController::send_nav2_goal(const geometry_msgs::msg::PoseStamped & goal)
 {
-    
+
     // Activate the robot navigation
     navigation_active_.store(true);
     nav2_msgs::action::NavigateToPose::Goal nav2_goal;
