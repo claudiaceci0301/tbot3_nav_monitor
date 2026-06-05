@@ -47,7 +47,8 @@ private:
     double prev_distance_to_goal_ = 0.0;               ///< Previous Distance to goal [m]
     int stagnant_count_           = 0;                 ///< Initial stagnant count value
     rclcpp::Time last_odom_time_{0, 0, RCL_ROS_TIME};  ///< Last odom time (coherent time type)
-
+    rclcpp::TimerBase::SharedPtr flush_timer_;         ///< TimerBase ptr to allor for flushing data
+    
     // ── Subscriber / files  ──────────────────────────────────────────────────
     rclcpp::Subscription<tbot3_nav_monitor::msg::NavigationMetrics>::SharedPtr csv_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_rate_sub_;

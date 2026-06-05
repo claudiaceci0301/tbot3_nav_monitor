@@ -12,7 +12,7 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
 {
     // ── Declare parameters with defaults ─────────────────────────────────────
     declare_parameter("enable_csv",                      false);
-    declare_parameter("log_directory",                   "/root/tbot3_nav_monitor/logs");
+    declare_parameter("log_directory",                   "/workspace/logs"); 
     declare_parameter("log_filename",                    "metric_collector_data");
     declare_parameter("battery_alert_thresholds",        std::vector<double>{0.5, 0.85, 0.95});  
     declare_parameter("stagnant_count_alert_thresholds", 5);
@@ -32,17 +32,32 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
     auto now = this->get_clock()->now(); // get_clock() follows ROS2 clock
     session_timestamp_ = now.nanoseconds() / 1000000; 
 
-    last_odom_time_ = this->get_clock()->now(); 
-
-    // ── Subscribers ──────────────────────────────────────────────────────────
-    odom_rate_sub_ = create_subscription<nav_msgs::msg::Odometry>("/odom", 10,
-        std::bind(&DataLogger::odom_rate_callback, this, std::placeholders::_1));
-
+    // ── ENABLE CSV ────────────────────────────────────────────────────────────
     if (enable_csv_) 
     {
         std::filesystem::create_directories(log_directory_);
-
-        std::string full_path = log_directory_ + "/" + log_filename_ + "_" + std::to_string(now.nanoseconds()) + ".csv";
+        //std::filesystem::remove_all(log_directory_);
+        //std::filesystem::create_directories(log_directory_);
+        // Clena up
+        if (std::filesystem::exists(log_directory_))
+        {
+            RCLCPP_INFO(get_logger(), "Cleaning logs in: %s", log_directory_.c_str());
+            for (auto const & entry : std::filesystem::directory_iterator(log_directory_))
+            {
+                if (entry.path().extension() == ".csv")
+                {
+                    std::filesystem::remove(entry);
+                    RCLCPP_INFO(get_logger(), "Removing: %s", entry.path().c_str());
+                }
+            }
+        }
+        
+        // Uses system clock only for the file name (indipendent on sim time)
+        auto wall_now = std::chrono::system_clock::now();
+        auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+            wall_now.time_since_epoch()).count();
+        
+        std::string full_path = log_directory_ + "/" + log_filename_ + "_" + std::to_string(ts) + ".csv";
 
         metric_collector_csv_file.open(full_path); //ofstream - write only
 
@@ -65,8 +80,22 @@ DataLogger::DataLogger(const std::string & node_name, const rclcpp::NodeOptions 
                 << "goal_reached,"
                 << "distance_to_goal [m]\n";    
         }
+
+        
+        flush_timer_ = this->create_wall_timer(std::chrono::seconds(2),
+            [this]() {
+                if (metric_collector_csv_file.is_open())
+                    metric_collector_csv_file.flush();
+            }
+        );
+
     }
 
+    last_odom_time_ = this->get_clock()->now(); 
+
+    // ── Subscribers ──────────────────────────────────────────────────────────
+    odom_rate_sub_ = create_subscription<nav_msgs::msg::Odometry>("/odom", 10,
+        std::bind(&DataLogger::odom_rate_callback, this, std::placeholders::_1));
     csv_sub_ = create_subscription<tbot3_nav_monitor::msg::NavigationMetrics>("/navigation_metrics", 10,
             std::bind(&DataLogger::csv_callback, this, std::placeholders::_1)
     );
@@ -102,7 +131,7 @@ void DataLogger::csv_callback(
     // Latency -> btw rclcpp::Time
     const auto received_time = this->get_clock()->now(); // rclcpp::Time
     double latency_ms = (received_time - publish_time).seconds() * 1000.0;
-
+    
     // Write CSV file
     metric_collector_csv_file
         << real_time_ms << ","        // wall clock
@@ -115,8 +144,6 @@ void DataLogger::csv_callback(
         << msg->goal_reached << ","
         << msg->distance_to_goal
         << "\n";
-
-    metric_collector_csv_file.flush();
 
     // ── Battery Alert  ─────────────────────────────────────────────────
 
@@ -145,7 +172,7 @@ void DataLogger::csv_callback(
     {
         stagnant_count_++;
 
-        if (stagnant_count_ >= stagnant_count_alert_thresholds_)
+        if (stagnant_count_ >= stagnant_count_alert_thresholds_ && !msg->goal_reached)
         {
             RCLCPP_WARN(get_logger(),
                 "Distance not decreasing for %d ticks",

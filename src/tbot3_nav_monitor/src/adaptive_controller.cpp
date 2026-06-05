@@ -24,7 +24,7 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     declare_parameter("normal_max_vel_theta",          0.6);
     declare_parameter("normal_xy_goal_tolerance",      0.35);
     declare_parameter("normal_yaw_goal_tolerance",     0.35);
-    declare_parameter("normal_inflation_radius",       0.3);
+    declare_parameter("normal_inflation_radius",       0.5);
     declare_parameter("normal_gridbase_tolerance",     0.5);
     declare_parameter("normal_costmap_resolution",     0.05);
     declare_parameter("normal_costmap_width",          3);
@@ -35,7 +35,7 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     declare_parameter("reduced_max_vel_theta",          0.5);
     declare_parameter("increased_xy_goal_tolerance",   0.40);
     declare_parameter("increased_yaw_goal_tolerance",  0.40);
-    declare_parameter("increased_inflation_radius",    0.4);
+    declare_parameter("increased_inflation_radius",    0.6);
     declare_parameter("reduced_gridbase_tolerance",    0.35);
     declare_parameter("increased_costmap_resolution",  0.08);
     declare_parameter("increased_costmap_width",       4);
