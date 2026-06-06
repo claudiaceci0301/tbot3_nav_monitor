@@ -179,6 +179,13 @@ void MetricCollector::odom_callback(const std::shared_ptr<const nav_msgs::msg::O
         // Save the start position 
         start_.x = new_x;
         start_.y = new_y;
+
+        
+        // Re-calculate optimal path with new target and new start position
+        const double dx = target_.x - start_.x;
+        const double dy = target_.y - start_.y;
+        optimal_path_ = std::sqrt(dx*dx + dy*dy);
+    
     }
     else
     {
@@ -288,14 +295,6 @@ void MetricCollector::cmdvel_callback(const std::shared_ptr<const geometry_msgs:
 
         RCLCPP_DEBUG(get_logger(), "Target in map frame: (%.3f, %.3f, %.3f)",
             target_.x, target_.y, target_.theta);
-    }
-
-    // Re-calculate optimal path with new target
-    if (odom_received_)
-    {
-        const double dx = target_.x - start_.x;
-        const double dy = target_.y - start_.y;
-        optimal_path_ = std::sqrt(dx*dx + dy*dy);
     }
 }
 

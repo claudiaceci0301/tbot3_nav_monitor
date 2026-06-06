@@ -26,6 +26,9 @@ services:
       - -c
       - |
         source /opt/ros/humble/setup.bash
+        cd /workspace
+        colcon build --packages-select tbot3_nav_monitor
+        source install/setup.bash
         ros2 run foxglove_bridge foxglove_bridge \
         --ros-args \
         -p port:=8765 \

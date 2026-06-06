@@ -17,12 +17,12 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     declare_parameter("accuracy_threshold",   0.7);  // <0.7 mean accuracy → relax goal tolerance
     declare_parameter("efficiency_threshold", 0.75); // <0.75 efficiency → conservative plan
     declare_parameter("obstacle_threshold",   0.4);  // <0.4 mean proximity → complex environment
-    declare_parameter("window_size",          10);   // evaluate every 10 messages
+    declare_parameter("window_size",          5);   // evaluate every 10 messages
 
     // ── Default values from params.yaml ─────────────────────────────────────
     declare_parameter("normal_max_vel_x",              0.3);
     declare_parameter("normal_max_vel_theta",          0.6);
-    declare_parameter("normal_xy_goal_tolerance",      0.35);
+    declare_parameter("normal_xy_goal_tolerance",      0.25);
     declare_parameter("normal_yaw_goal_tolerance",     0.35);
     declare_parameter("normal_inflation_radius",       0.5);
     declare_parameter("normal_gridbase_tolerance",     0.5);
@@ -33,7 +33,7 @@ AdaptiveController::AdaptiveController(const std::string & node_name, const rclc
     // ── Adaptive values ──────────────────────────────────────────────────────
     declare_parameter("reduced_max_vel_x",             0.2);
     declare_parameter("reduced_max_vel_theta",         0.5);
-    declare_parameter("increased_xy_goal_tolerance",   0.40);
+    declare_parameter("increased_xy_goal_tolerance",   0.30);
     declare_parameter("increased_yaw_goal_tolerance",  0.40);
     declare_parameter("increased_inflation_radius",    0.6);
     declare_parameter("reduced_gridbase_tolerance",    0.35);
