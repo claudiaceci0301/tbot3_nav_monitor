@@ -392,4 +392,5 @@ On my machines wich has 8GB RAM only, the control loop frequency warnings are ex
 --- 
 ## Demo
 
-*[Insert 5-minute demo video link here]*
+*[5-minute demo video link here]*
+https://drive.google.com/file/d/1bubgYuFZ7Mt_gmLTlw661DgsAYTMXb2o/view?usp=sharing
