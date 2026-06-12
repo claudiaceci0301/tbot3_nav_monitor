@@ -55,6 +55,7 @@ public:
     /// @param options If I pass an option it will take it, otherwise it will take the default NodeOptions
     explicit MetricCollector(const std::string & node_name,
         const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+        // in this way also the default is accepted (no options explicit)
     
         /// @brief Destructor
     ~MetricCollector() = default;
