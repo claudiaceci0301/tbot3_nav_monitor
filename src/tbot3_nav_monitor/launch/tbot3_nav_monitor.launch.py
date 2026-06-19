@@ -14,7 +14,7 @@ def generate_launch_description():
             package='tbot3_nav_monitor',
             executable='metric_collector',
             parameters=[config],
-            output='screen',
+            output='screen'
             #arguments=['--ros-args', '--log-level', 'debug']
         )
     ])
